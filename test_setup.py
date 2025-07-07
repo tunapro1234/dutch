@@ -15,7 +15,7 @@ def test_imports():
         from src.card import Card, Suit, create_deck
         from src.player import Player, HumanPlayer
         from src.game import Game
-        from players import RandomPlayer, RandomAI, SimpleAI
+        from players import SimpleAI, BayesPlayer
         print("✅ All imports successful!")
         return True
     except ImportError as e:

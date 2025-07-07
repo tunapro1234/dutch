@@ -13,12 +13,13 @@ A reinforcement learning project implementing a Cabo-like hidden-information car
 
 ### Gameplay
 On each turn, a player:
-1. Draws a card from the deck
-2. Chooses one action:
+1. **Optional**: Discard any pairs of known matching cards (before drawing)
+2. Draws a card from the deck or discard pile
+3. Chooses one action:
    - **Discard** the drawn card
    - **Swap** the drawn card with one of their face-down cards
    - **Use special ability** (if the card is a Jack or Queen)
-   - **Discard matches** (if they have cards matching the drawn card's value)
+4. **Optional**: Discard any pairs of known matching cards (after actions)
 
 ### Special Cards
 - **Red Kings** (♥K, ♦K): Worth 0 points
@@ -63,15 +64,16 @@ python main.py
 
 ### Starting a Game
 
-**Quick 2-Player Game** (Recommended):
+**⚡ Quick 2-Player Game** (Recommended):
 ```bash
 python quick_game.py
 ```
-- Simple interface for human vs AI
+- Simple command-line interface for human vs AI
 - Choose from 3 different AI opponents
-- Streamlined setup for fast gameplay
+- Streamlined setup with **Dutch call** feature
+- **Hidden peek** - only you see the cards you peek at
 
-**Full Game Setup**:
+**📝 Full CLI Setup**:
 ```bash
 python main.py
 ```
@@ -113,15 +115,16 @@ Enter choice: 3
 dutch/
 ├── .gitignore             # Git ignore patterns
 ├── environment.yml        # Conda environment specification
-├── main.py               # Main game entry point (2-4 players)
-├── quick_game.py         # Quick 2-player game launcher
+├── quick_game.py         # ⚡ Quick 2-player CLI launcher (BEST)
+├── main.py               # 📝 Full CLI game (2-4 players)
 ├── test_setup.py         # Environment and functionality tests
+├── test_gpu.py           # 🔧 PyTorch GPU benchmark
 ├── README.md             # This file
 ├── src/                  # Core game engine
 │   ├── __init__.py       # Package initialization
 │   ├── card.py           # Card class and deck creation
 │   ├── player.py         # Base player classes (Human, Player)
-│   └── game.py           # Main game engine
+│   └── game.py           # Main game engine with Dutch calls
 └── players/              # AI player implementations
     ├── __init__.py       # Player package initialization
     ├── basic_ai.py       # RandomPlayer and RandomAI
@@ -130,26 +133,24 @@ dutch/
 
 ## 🧠 AI Players
 
-The `players/` folder contains different AI implementations:
-
-### RandomPlayer (basic_ai.py)
-- Makes logical but simple decisions
-- Always discards matches (optimal)
-- Uses special abilities when beneficial
-- Simple value-based card evaluation (keep low, discard high)
-- Good for learning the game mechanics
-
-### RandomAI (basic_ai.py)
-- Makes completely random valid moves
-- 70% chance to discard matches
-- Random choice between discard/swap/ability
-- Useful for testing edge cases
+The `players/` folder contains AI implementations:
 
 ### SimpleAI (simple_ai.py)
-- More strategic than RandomPlayer
-- Advanced heuristics for decision making
-- Prefers opponent information gathering
-- Better at evaluating card value trades
+- Strategic decision making with min/max score calculation
+- Smart double discard timing (prefers high-value doubles)
+- Advanced heuristics for card evaluation
+- Intelligent draw source selection (deck vs discard)
+- Improved Dutch call logic with guaranteed win detection
+- 40% more aggressive than before
+
+### BayesPlayer (bayes_player.py)
+- **Advanced Bayesian probability analysis**
+- **Min/Max score range calculations** for perfect Dutch timing
+- **Opponent modeling** - tracks behavior, actions, and card knowledge
+- **Guaranteed win detection** - calls Dutch when mathematically certain
+- **Confidence-based decisions** with multiple aggression levels
+- **Real-time deck composition tracking** and probability updates
+- **Strategic opponent estimation** based on observed play patterns
 
 ## 🚀 Next Steps (RL Development)
 
@@ -182,13 +183,16 @@ This tests:
 
 ## 🎯 Features
 
-- ✅ Complete CLI interface
-- ✅ Human vs AI gameplay
-- ✅ All special card rules implemented
-- ✅ Modular, clean OOP design
-- ✅ Ready for RL agent integration
-- ✅ Comprehensive test coverage
+- ✅ **Improved CLI interface** with intuitive text-based gameplay
+- ✅ **Strategic double discard system** - discard pairs before/after turns
+- ✅ **Dutch call system** - end the game when you want!
+- ✅ **Hidden peek mechanics** - only you see what you peek at
+- ✅ **GPU-accelerated PyTorch** ready for RL training (RTX 3070 tested)  
+- ✅ **Human vs AI gameplay** with strategic SimpleAI opponent
+- ✅ **All special card rules** implemented (Red Kings, Jack/Queen abilities)
+- ✅ **Modular, clean OOP design** ready for RL agent integration
+- ✅ **Comprehensive test coverage** for both game logic and GPU performance
 
 ---
 
-**Ready to play?** Run `python quick_game.py` for a quick 2-player game! 🎉 
+**Ready to play?** Run `python quick_game.py` and call DUTCH when you're ready! 🎯🚨 

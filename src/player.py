@@ -77,23 +77,7 @@ class Player(ABC):
         self.known_cards[position] = True  # Player now knows this card
         return old_card
     
-    def remove_matching_cards(self, drawn_card: Card) -> List[Tuple[int, Card]]:
-        """
-        Remove all cards from hand that match the drawn card's value.
-        
-        Args:
-            drawn_card: The card that was drawn
-            
-        Returns:
-            List of (position, card) tuples that were removed
-        """
-        removed_cards = []
-        for i in range(4):
-            if self.hand[i] is not None and self.hand[i] == drawn_card:
-                removed_cards.append((i, self.hand[i]))
-                self.hand[i] = None
-                self.known_cards[i] = False
-        return removed_cards
+
     
     def get_score(self) -> int:
         """Calculate the player's current score (sum of card values)"""
@@ -114,6 +98,71 @@ class Player(ABC):
     def get_valid_positions(self) -> List[int]:
         """Get list of positions that have cards"""
         return [i for i in range(4) if self.hand[i] is not None]
+    
+    def get_known_doubles(self) -> List[Tuple[int, int, Card]]:
+        """
+        Get pairs of known cards with the same value.
+        
+        Returns:
+            List of (pos1, pos2, card) tuples representing double cards
+        """
+        doubles = []
+        for i in range(4):
+            if self.hand[i] is not None and self.known_cards[i]:
+                for j in range(i + 1, 4):
+                    if (self.hand[j] is not None and 
+                        self.known_cards[j] and 
+                        self.hand[i].value == self.hand[j].value):
+                        doubles.append((i, j, self.hand[i]))
+        return doubles
+    
+    def get_discard_pile_matches(self, top_discard_card: 'Card') -> List[Tuple[int, 'Card']]:
+        """
+        Get known cards that match the top discard card.
+        
+        Args:
+            top_discard_card: The card on top of discard pile
+            
+        Returns:
+            List of (position, card) tuples for matching cards
+        """
+        matches = []
+        if top_discard_card is None:
+            return matches
+            
+        for i in range(4):
+            if (self.hand[i] is not None and 
+                self.known_cards[i] and 
+                self.hand[i].value == top_discard_card.value):
+                matches.append((i, self.hand[i]))
+        return matches
+    
+    def discard_doubles(self, pos1: int, pos2: int) -> Tuple[Card, Card]:
+        """
+        Discard a pair of cards with the same value.
+        
+        Args:
+            pos1, pos2: Positions of the cards to discard
+            
+        Returns:
+            Tuple of the two discarded cards
+        """
+        if (pos1 < 0 or pos1 >= 4 or pos2 < 0 or pos2 >= 4 or
+            self.hand[pos1] is None or self.hand[pos2] is None):
+            raise ValueError("Invalid positions for double discard")
+        
+        if self.hand[pos1].value != self.hand[pos2].value:
+            raise ValueError("Cards must have the same value to discard as doubles")
+        
+        card1 = self.hand[pos1]
+        card2 = self.hand[pos2]
+        
+        self.hand[pos1] = None
+        self.hand[pos2] = None
+        self.known_cards[pos1] = False
+        self.known_cards[pos2] = False
+        
+        return card1, card2
     
     def display_hand(self, reveal_all: bool = False) -> str:
         """
@@ -181,6 +230,53 @@ class Player(ABC):
             Tuple of (target_player, target_position). If target_player is None, peek at own card.
         """
         pass
+    
+    def choose_draw_source(self, top_discard_card: 'Card', game_state: dict) -> str:
+        """
+        Choose whether to draw from deck or discard pile.
+        
+        Args:
+            top_discard_card: The card on top of discard pile
+            game_state: Current game state information
+            
+        Returns:
+            "deck" or "discard"
+        """
+        # Default implementation: always draw from deck
+        return "deck"
+    
+    def want_to_discard_doubles(self, doubles_available: List[Tuple[int, int, 'Card']], 
+                               timing: str, game_state: dict) -> Optional[Tuple[int, int]]:
+        """
+        Choose whether to discard a pair of doubles.
+        
+        Args:
+            doubles_available: List of (pos1, pos2, card) tuples for available doubles
+            timing: "before_draw" or "after_turn"
+            game_state: Current game state
+            
+        Returns:
+            (pos1, pos2) tuple if want to discard, None otherwise
+        """
+        # Default implementation: never discard doubles
+        return None
+    
+    def want_to_discard_pile_matches(self, matches_available: List[Tuple[int, 'Card']], 
+                                   top_discard_card: 'Card', timing: str, game_state: dict) -> Optional[List[int]]:
+        """
+        Choose whether to discard cards that match the top discard card.
+        
+        Args:
+            matches_available: List of (position, card) tuples for matching cards
+            top_discard_card: The card on top of discard pile
+            timing: "before_draw" or "after_turn"
+            game_state: Current game state
+            
+        Returns:
+            List of positions to discard, None otherwise
+        """
+        # Default implementation: never discard matches
+        return None
 
 
 class HumanPlayer(Player):
@@ -205,18 +301,7 @@ class HumanPlayer(Player):
         """Let human choose what to do with drawn card"""
         print(f"\nYou drew: {drawn_card}")
         print(f"Your hand: {self.display_hand()}")
-        
-        # Check for matching cards
-        matching_positions = []
-        for i, card in enumerate(self.hand):
-            if card is not None and self.known_cards[i] and card == drawn_card:
-                matching_positions.append(i)
-        
-        if matching_positions:
-            print(f"You have matching cards at positions: {matching_positions}")
-            choice = input("Do you want to discard all matching cards? (y/n): ").lower()
-            if choice == 'y':
-                return {"action": "discard_matches"}
+        print(f"Current score: {self.get_score()}")
         
         # Handle special abilities
         if drawn_card.has_special_ability():
@@ -230,6 +315,7 @@ class HumanPlayer(Player):
         print("2. Swap with one of your cards")
         if drawn_card.has_special_ability():
             print("3. Use special ability")
+        print("4. Call DUTCH (end the game)")
         
         while True:
             try:
@@ -241,6 +327,8 @@ class HumanPlayer(Player):
                     return {"action": "swap", "position": position}
                 elif choice == 3 and drawn_card.has_special_ability():
                     return {"action": "use_ability"}
+                elif choice == 4:
+                    return {"action": "call_dutch"}
                 else:
                     print("Invalid choice. Please try again.")
             except ValueError:
@@ -330,6 +418,68 @@ class HumanPlayer(Player):
                     print("Invalid choice.")
             except ValueError:
                 print("Please enter a valid number.")
+    
+    def want_to_discard_doubles(self, doubles_available: List[Tuple[int, int, Card]], 
+                               timing: str, game_state: dict) -> Optional[Tuple[int, int]]:
+        """Let human choose whether to discard doubles"""
+        if not doubles_available:
+            return None
+        
+        timing_msg = "before drawing" if timing == "before_draw" else "after your turn"
+        print(f"\n🎲 You have doubles available to discard {timing_msg}:")
+        
+        for i, (pos1, pos2, card) in enumerate(doubles_available):
+            print(f"{i+1}. Discard {card} at positions {pos1} and {pos2} (value: {card.get_score_value()})")
+        
+        print("0. Keep all doubles (don't discard)")
+        
+        while True:
+            try:
+                choice = int(input("Choose doubles to discard (0 to skip): "))
+                if choice == 0:
+                    return None
+                elif 1 <= choice <= len(doubles_available):
+                    pos1, pos2, card = doubles_available[choice - 1]
+                    return (pos1, pos2)
+                else:
+                    print(f"Please choose 0-{len(doubles_available)}")
+            except ValueError:
+                print("Please enter a valid number.")
+    
+    def want_to_discard_pile_matches(self, matches_available: List[Tuple[int, Card]], 
+                                   top_discard_card: Card, timing: str, game_state: dict) -> Optional[List[int]]:
+        """Let human choose whether to discard cards matching discard pile"""
+        if not matches_available:
+            return None
+        
+        timing_msg = "before drawing" if timing == "before_draw" else "after your turn"
+        print(f"\n🎯 You have cards matching the discard pile {timing_msg}!")
+        print(f"Top discard: {top_discard_card}")
+        
+        for i, (pos, card) in enumerate(matches_available):
+            print(f"{i+1}. Discard {card} at position {pos} (matches top discard)")
+        
+        print("0. Keep all matching cards")
+        print("A. Discard ALL matching cards")
+        
+        while True:
+            try:
+                choice = input("Choose cards to discard (0/A/1-{}): ".format(len(matches_available))).strip().upper()
+                
+                if choice == "0":
+                    return None
+                elif choice == "A":
+                    # Discard all matches
+                    return [pos for pos, card in matches_available]
+                else:
+                    choice_num = int(choice)
+                    if 1 <= choice_num <= len(matches_available):
+                        pos, card = matches_available[choice_num - 1]
+                        return [pos]
+                    else:
+                        print(f"Please choose 0, A, or 1-{len(matches_available)}")
+            except ValueError:
+                print("Please enter a valid option.")
 
 
 class SimpleAI(Player):
