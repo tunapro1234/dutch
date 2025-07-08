@@ -23,15 +23,169 @@ from src.player import Player, HumanPlayer
 from players.simple_ai import SimpleAI
 from players.bayes_player import BayesPlayer
 
+# DQRN imports (optional, only if available)
+try:
+    import torch
+    from players.dqrn_multi_head.dqrn_network import create_dqrn_network
+    from players.dqrn_multi_head.training import DQRNAgent
+    DQRN_AVAILABLE = True
+except ImportError:
+    DQRN_AVAILABLE = False
+    print("ℹ️  DQRN not available (PyTorch not installed)")
+
+
+def list_dqrn_training_runs() -> Dict[str, List[str]]:
+    """List available DQRN training runs and their checkpoints"""
+    base_dir = "players/dqrn_multi_head/checkpoints"
+    training_runs = {}
+    
+    if not os.path.exists(base_dir):
+        return {}
+    
+    for folder in os.listdir(base_dir):
+        folder_path = os.path.join(base_dir, folder)
+        if os.path.isdir(folder_path):
+            checkpoints = []
+            for file in os.listdir(folder_path):
+                if file.endswith('.pt'):
+                    checkpoints.append(os.path.join(folder_path, file))
+            
+            if checkpoints:
+                training_runs[folder] = sorted(checkpoints, key=os.path.getmtime, reverse=True)
+    
+    return training_runs
+
+
+def list_dqrn_checkpoints() -> List[str]:
+    """List all available DQRN checkpoints (backward compatibility)"""
+    training_runs = list_dqrn_training_runs()
+    all_checkpoints = []
+    
+    for run_name, checkpoints in training_runs.items():
+        all_checkpoints.extend(checkpoints)
+    
+    return sorted(all_checkpoints, key=os.path.getmtime, reverse=True)
+
+
+def select_dqrn_checkpoint() -> Optional[str]:
+    """Let user select a DQRN checkpoint by training run"""
+    training_runs = list_dqrn_training_runs()
+    
+    if not training_runs:
+        print("❌ No DQRN training runs found!")
+        print(f"Train a model first using: python train_dqrn.py --name <training_name>")
+        return None
+    
+    print("\nAvailable DQRN training runs:")
+    run_names = list(training_runs.keys())
+    
+    for i, run_name in enumerate(run_names):
+        checkpoints = training_runs[run_name]
+        latest_checkpoint = checkpoints[0]  # Already sorted by time
+        
+        try:
+            # Get info from latest checkpoint
+            checkpoint_data = torch.load(latest_checkpoint, map_location='cpu')
+            episode = checkpoint_data.get('episode', 'Unknown')
+            steps = checkpoint_data.get('step_count', 'Unknown')
+            print(f"{i + 1}. {run_name} (Latest: Episode {episode}, Steps {steps}, {len(checkpoints)} checkpoints)")
+        except:
+            print(f"{i + 1}. {run_name} ({len(checkpoints)} checkpoints)")
+    
+    # Select training run
+    while True:
+        try:
+            choice = input(f"\nSelect training run (1-{len(run_names)}): ").strip()
+            idx = int(choice) - 1
+            if 0 <= idx < len(run_names):
+                selected_run = run_names[idx]
+                break
+            else:
+                print(f"Please enter a number between 1 and {len(run_names)}")
+        except ValueError:
+            print("Please enter a valid number")
+        except KeyboardInterrupt:
+            return None
+    
+    # Use the latest checkpoint from selected run
+    selected_checkpoints = training_runs[selected_run]
+    latest_checkpoint = selected_checkpoints[0]
+    
+    print(f"🎯 Selected: {selected_run} - {os.path.basename(latest_checkpoint)}")
+    return latest_checkpoint
+
+
+def load_dqrn_agent(checkpoint_path: str, name: str, device: str = "cuda") -> Optional[DQRNAgent]:
+    """Load DQRN agent from checkpoint"""
+    if not DQRN_AVAILABLE:
+        print("❌ DQRN not available")
+        return None
+    
+    try:
+        # Create network
+        network = create_dqrn_network(device)
+        
+        # Load checkpoint
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        network.load_state_dict(checkpoint["policy_net"])
+        network.eval()
+        
+        # Create agent
+        agent = DQRNAgent(network, device)
+        agent.name = name
+        agent.epsilon = 0.0  # No exploration during play
+        
+        print(f"✅ DQRN model loaded: {os.path.basename(checkpoint_path)}")
+        episode = checkpoint.get('episode', 'Unknown')
+        steps = checkpoint.get('step_count', 'Unknown')
+        print(f"   Training: Episode {episode}, Steps {steps}")
+        
+        return agent
+        
+    except Exception as e:
+        print(f"❌ Failed to load DQRN model: {e}")
+        return None
+
 
 def quick_play():
     """Quick human vs AI game"""
     print("🎮 Dutch Cabo - Quick Play")
     print("=" * 50)
     
+    # AI type selection
+    print("\nSelect AI opponent:")
+    print("1. SimpleAI - Rule-based AI")
+    print("2. BayesPlayer - Advanced Bayesian AI")
+    if DQRN_AVAILABLE:
+        print("3. DQRN - Neural Network AI (trained model)")
+    
+    max_choice = 3 if DQRN_AVAILABLE else 2
+    while True:
+        choice = input(f"\nSelect AI opponent (1-{max_choice}): ").strip()
+        if choice in [str(i) for i in range(1, max_choice + 1)]:
+            break
+        print(f"Please enter a number between 1 and {max_choice}")
+    
     # Create players
     human = HumanPlayer("You")
-    ai = BayesPlayer("BayesAI")
+    
+    if choice == "1":
+        ai = SimpleAI("SimpleAI")
+    elif choice == "2":
+        ai = BayesPlayer("BayesAI")
+    elif choice == "3" and DQRN_AVAILABLE:
+        checkpoint_path = select_dqrn_checkpoint()
+        if not checkpoint_path:
+            print("❌ No DQRN checkpoint selected, falling back to BayesAI")
+            ai = BayesPlayer("BayesAI")
+        else:
+            ai = load_dqrn_agent(checkpoint_path, "DQRN_AI")
+            if not ai:
+                print("❌ Failed to load DQRN, falling back to BayesAI")
+                ai = BayesPlayer("BayesAI")
+    
+    print(f"\n🥊 {human.name} vs {ai.name}")
+    print("=" * 50)
     
     # Create and run game
     game = Game([human, ai])
@@ -57,9 +211,22 @@ def agent_vs_agent():
     print("\nAvailable agents:")
     print("1. SimpleAI - Rule-based AI")
     print("2. BayesPlayer - Advanced Bayesian AI")
+    if DQRN_AVAILABLE:
+        print("3. DQRN - Neural Network AI (trained model)")
     
-    agent1_choice = input("\nSelect Agent 1 (1-2): ").strip()
-    agent2_choice = input("Select Agent 2 (1-2): ").strip()
+    max_choice = 3 if DQRN_AVAILABLE else 2
+    
+    while True:
+        agent1_choice = input(f"\nSelect Agent 1 (1-{max_choice}): ").strip()
+        if agent1_choice in [str(i) for i in range(1, max_choice + 1)]:
+            break
+        print(f"Please enter a number between 1 and {max_choice}")
+    
+    while True:
+        agent2_choice = input(f"Select Agent 2 (1-{max_choice}): ").strip()
+        if agent2_choice in [str(i) for i in range(1, max_choice + 1)]:
+            break
+        print(f"Please enter a number between 1 and {max_choice}")
     
     # Create agents
     agent1 = create_agent(agent1_choice, "Agent1")
@@ -203,6 +370,16 @@ def create_agent(choice: str, name: str) -> Optional[Player]:
         return SimpleAI(name)
     elif choice == "2":
         return BayesPlayer(name)
+    elif choice == "3" and DQRN_AVAILABLE:
+        print(f"\nSetting up DQRN for {name}...")
+        checkpoint_path = select_dqrn_checkpoint()
+        if checkpoint_path:
+            agent = load_dqrn_agent(checkpoint_path, name)
+            if agent:
+                return agent
+        
+        print(f"❌ Failed to load DQRN for {name}, falling back to BayesPlayer")
+        return BayesPlayer(name)
     else:
         return None
 
@@ -309,12 +486,16 @@ def full_setup():
         print("1. Human")
         print("2. SimpleAI")  
         print("3. BayesPlayer")
+        if DQRN_AVAILABLE:
+            print("4. DQRN - Neural Network AI")
+        
+        max_choice = 4 if DQRN_AVAILABLE else 3
         
         while True:
-            choice = input(f"Select type for Player {i + 1} (1-3): ").strip()
-            if choice in ["1", "2", "3"]:
+            choice = input(f"Select type for Player {i + 1} (1-{max_choice}): ").strip()
+            if choice in [str(j) for j in range(1, max_choice + 1)]:
                 break
-            print("Please enter 1, 2, or 3.")
+            print(f"Please enter a number between 1 and {max_choice}.")
         
         if choice == "1":
             name = input(f"Enter name for Player {i + 1}: ").strip() or f"Player{i + 1}"
@@ -325,6 +506,20 @@ def full_setup():
         elif choice == "3":
             name = f"BayesAI{i + 1}"
             players.append(BayesPlayer(name))
+        elif choice == "4" and DQRN_AVAILABLE:
+            name = f"DQRN{i + 1}"
+            print(f"\nSetting up DQRN for Player {i + 1}...")
+            checkpoint_path = select_dqrn_checkpoint()
+            if checkpoint_path:
+                agent = load_dqrn_agent(checkpoint_path, name)
+                if agent:
+                    players.append(agent)
+                else:
+                    print(f"❌ Failed to load DQRN for Player {i + 1}, using BayesPlayer instead")
+                    players.append(BayesPlayer(f"BayesAI{i + 1}"))
+            else:
+                print(f"❌ No checkpoint selected for Player {i + 1}, using BayesPlayer instead")
+                players.append(BayesPlayer(f"BayesAI{i + 1}"))
     
     print(f"\n🎲 Starting game with {len(players)} players")
     print("Players:", [p.name for p in players])
@@ -380,6 +575,31 @@ def show_help():
     print("  --quick-play        Quick human vs AI game")
     print("  --agent-vs-agent    Watch two AIs compete")
     print("  --full-setup        Full game setup (2-4 players)")
+    print()
+    print("Available AI Players:")
+    print("  • SimpleAI          Rule-based AI player")
+    print("  • BayesPlayer       Advanced Bayesian AI")
+    if DQRN_AVAILABLE:
+        print("  • DQRN              Neural Network AI (requires trained model)")
+    else:
+        print("  • DQRN              Neural Network AI (PyTorch required)")
+    print()
+    print("DQRN Training:")
+    if DQRN_AVAILABLE:
+        print("  Train models with:  python train_dqrn.py --name <run_name>")
+        print("  Example:            python train_dqrn.py --name batch1024")
+        training_runs = list_dqrn_training_runs()
+        if training_runs:
+            total_checkpoints = sum(len(checkpoints) for checkpoints in training_runs.values())
+            print(f"  Available runs:     {len(training_runs)} run(s), {total_checkpoints} checkpoint(s)")
+            for run_name in list(training_runs.keys())[:3]:  # Show first 3
+                print(f"    • {run_name}")
+            if len(training_runs) > 3:
+                print(f"    • ... and {len(training_runs) - 3} more")
+        else:
+            print("  Available runs:     None (train first)")
+    else:
+        print("  Install PyTorch to use DQRN neural network AI")
     print()
     print("Testing:")
     print("  --test-system       Test DQRN neural network system")
