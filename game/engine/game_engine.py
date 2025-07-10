@@ -282,13 +282,24 @@ class GameEngine:
     
     def offer_special_ability_after_swap(self, player: PlayerBase, special_card: Card) -> Dict[str, Any]:
         """Offer to use special ability of a card that was swapped out"""
-        # For engine: AI automatically uses special abilities
-        if special_card.is_jack():
-            return self.handle_jack_ability(player, special_card)
-        elif special_card.is_queen():
-            return self.handle_queen_ability(player, special_card)
+        # Ask player if they want to use the special ability
+        wants_to_use = player.want_to_use_special_ability_after_swap(special_card, self.get_game_state())
         
-        # Always discard the special card after potential use
+        if wants_to_use:
+            if special_card.is_jack():
+                ability_result = self.handle_jack_ability(player, special_card)
+                ability_result["ability_used"] = True
+                # Always discard after use
+                self.discard_card(special_card)
+                return ability_result
+            elif special_card.is_queen():
+                ability_result = self.handle_queen_ability(player, special_card)
+                ability_result["ability_used"] = True
+                # Always discard after use
+                self.discard_card(special_card)
+                return ability_result
+        
+        # Player chose not to use ability or no ability available
         self.discard_card(special_card)
         return {"ability_used": False}
     
@@ -298,16 +309,15 @@ class GameEngine:
         if not opponents:
             return {"error": "No opponents to swap with"}
         
-        # Choose swap targets
-        target_player, target_position = player.choose_swap_target(opponents, self.get_game_state())
-        
-        # Choose own card to swap
+        # Choose which of your own cards to give away
         valid_positions = player.get_valid_positions()
         if not valid_positions:
             return {"error": "No cards to swap"}
         
-        # AI chooses randomly for now
-        own_position = random.choice(valid_positions)
+        own_position = player.choose_own_swap_position(self.get_game_state())
+        
+        # Choose which opponent card to take
+        target_player, target_position = player.choose_swap_target(opponents, self.get_game_state())
         
         # Perform the swap
         player_card = player.hand[own_position]

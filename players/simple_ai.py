@@ -51,11 +51,37 @@ class SimpleAI(PlayerBase):
         return {"action": "discard"}
     
     def choose_swap_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[PlayerBase, int]:
-        """Randomly choose swap target"""
+        """Choose an opponent and position to swap with"""
+        # Simple strategy: pick random opponent and position
         target_opponent = random.choice(opponents)
         valid_positions = target_opponent.get_valid_positions()
         target_position = random.choice(valid_positions)
         return target_opponent, target_position
+    
+    def choose_own_swap_position(self, game_state: dict) -> int:
+        """Choose which of own cards to give away when using Jack"""
+        # Simple strategy: give away the highest known card
+        valid_positions = self.get_valid_positions()
+        
+        # Prefer known cards over unknown ones
+        known_positions = [pos for pos in valid_positions if self.known_cards[pos]]
+        if known_positions:
+            # Among known cards, give away the highest value
+            highest_value = -1
+            best_position = known_positions[0]
+            
+            for pos in known_positions:
+                card = self.hand[pos]
+                if card is not None:
+                    card_value = card.get_score_value()
+                    if card_value > highest_value:
+                        highest_value = card_value
+                        best_position = pos
+            
+            return best_position
+        else:
+            # If no known cards, pick random position
+            return random.choice(valid_positions)
     
     def choose_peek_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[Optional[PlayerBase], int]:
         """Choose peek target - prioritize own unknown cards for information"""

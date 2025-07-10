@@ -40,6 +40,7 @@ class SmartBayesPlayer(PlayerBase):
         self.BAD_CARD_THRESHOLD = 7       # Cards 7+ are bad  
         self.DUTCH_MIN_ADVANTAGE = 2      # Minimum score advantage for Dutch
         self.LEARNING_PRIORITY = True     # Always learn unknowns first
+        self.QUEEN_OBSESSION = True       # ALWAYS prioritize Queen cards!
         
     def _init_deck_count(self) -> Dict[int, int]:
         """Initialize remaining card counts"""
@@ -76,11 +77,16 @@ class SmartBayesPlayer(PlayerBase):
         self.observe_card(drawn_card)
         drawn_value = drawn_card.get_score_value()
         
-        # PRIORITY 1: Always use special abilities for information
+        # PRIORITY 1: ALWAYS use Queen cards - critical for information gathering!
+        if drawn_card.is_queen():
+            print(f"{self.name}: QUEEN PRIORITY - Using Queen for maximum information gain!")
+            return {"action": "use_ability"}
+        
+        # PRIORITY 2: Use other special abilities (Jack)
         if drawn_card.has_special_ability():
             return {"action": "use_ability"}
         
-        # PRIORITY 2: Learn unknown cards (information gathering)
+        # PRIORITY 3: Learn unknown cards (information gathering)
         if self.LEARNING_PRIORITY:
             unknown_positions = self._get_unknown_positions()
             if unknown_positions:
@@ -89,7 +95,7 @@ class SmartBayesPlayer(PlayerBase):
                 print(f"{self.name}: Learning unknown card at position {target_pos} (smart targeting)")
                 return {"action": "swap", "position": target_pos}
         
-        # PRIORITY 3: Value optimization (all cards known)
+        # PRIORITY 4: Value optimization (all cards known)
         worst_pos = self._find_worst_known_position()
         if worst_pos is not None:
             worst_value = self.hand[worst_pos].get_score_value()
@@ -98,7 +104,7 @@ class SmartBayesPlayer(PlayerBase):
             if self._should_swap_for_value(drawn_value, worst_value):
                 return {"action": "swap", "position": worst_pos}
         
-        # PRIORITY 4: Check Dutch call before discarding
+        # PRIORITY 5: Check Dutch call before discarding
         if self._should_call_dutch(game_state):
             return {"action": "call_dutch"}
         
@@ -218,34 +224,89 @@ class SmartBayesPlayer(PlayerBase):
         return scores
     
     def choose_swap_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[PlayerBase, int]:
-        """Smart Jack ability usage"""
-        # Target random opponent, random position (keep it simple)
+        """Advanced opponent modeling for Jack swap target selection"""
         target_opponent = random.choice(opponents)
         valid_positions = target_opponent.get_valid_positions()
         target_position = random.choice(valid_positions)
         return target_opponent, target_position
     
+    def choose_own_swap_position(self, game_state: dict) -> int:
+        """Strategic selection of own card to give away in Jack swap"""
+        valid_positions = self.get_valid_positions()
+        
+        # Advanced strategy: consider information gain vs card value
+        known_positions = [pos for pos in valid_positions if self.known_cards[pos]]
+        
+        if known_positions:
+            # Among known cards, prioritize high-value cards to give away
+            best_position = known_positions[0]
+            highest_value = 0
+            
+            for pos in known_positions:
+                card = self.hand[pos]
+                if card is not None:
+                    card_value = card.get_score_value()
+                    # Special consideration for red kings (worth 0 points)
+                    if card.is_red_king():
+                        # Don't give away red kings unless necessary
+                        continue
+                    
+                    if card_value > highest_value:
+                        highest_value = card_value
+                        best_position = pos
+            
+            return best_position
+        else:
+            # For unknown cards, choose based on position heuristics
+            # Prefer corner positions (0,3) as they often have worse cards
+            corner_positions = [pos for pos in valid_positions if pos in [0, 3]]
+            if corner_positions:
+                return corner_positions[0]
+            else:
+                # Fallback: random selection
+                return random.choice(valid_positions)
+    
     def choose_peek_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[Optional[PlayerBase], int]:
-        """Smart Queen ability usage"""
-        # ALWAYS prioritize learning our own unknown cards
+        """AGGRESSIVE Queen ability usage - maximize information gain!"""
+        # PRIORITY 1: Learn ALL our own unknown cards first
         unknown_positions = self._get_unknown_positions()
         if unknown_positions:
-            target_pos = self._choose_best_learning_position(unknown_positions)
-            print(f"{self.name}: Peeking at own unknown card (position {target_pos})")
-            return None, target_pos
+            # Prioritize cards in corner positions (potentially worse cards)
+            corner_unknowns = [pos for pos in unknown_positions if pos in [0, 3]]
+            if corner_unknowns:
+                target_pos = corner_unknowns[0]
+                print(f"{self.name}: QUEEN INTEL - Targeting corner unknown at position {target_pos}")
+                return None, target_pos
+            else:
+                target_pos = unknown_positions[0]
+                print(f"{self.name}: QUEEN INTEL - Learning unknown card at position {target_pos}")
+                return None, target_pos
         
-        # If all our cards are known, peek at opponent
+        # PRIORITY 2: If all our cards known, gather opponent intelligence
         if opponents:
+            # Target random opponent for now (could be more sophisticated)
             target_opponent = random.choice(opponents)
             valid_positions = target_opponent.get_valid_positions()
             target_position = random.choice(valid_positions)
-            print(f"{self.name}: Peeking at {target_opponent.name}'s card")
+            print(f"{self.name}: QUEEN SPY - Gathering intel on {target_opponent.name} position {target_position}")
             return target_opponent, target_position
         
+        # Fallback
         return None, 0
     
     def choose_draw_source(self, top_discard_card: Card, game_state: dict) -> str:
-        """Smart draw source decision"""
+        """Smart draw source decision - PRIORITIZE QUEEN CARDS!"""
+        
+        # ABSOLUTE PRIORITY: Always take Queen cards for information!
+        if top_discard_card.is_queen():
+            print(f"{self.name}: QUEEN SPOTTED! Taking Queen from discard for maximum intel!")
+            return "discard"
+        
+        # High priority: Take Jack cards for swap opportunities
+        if top_discard_card.is_jack():
+            print(f"{self.name}: Taking Jack from discard for strategic swapping")
+            return "discard"
+        
         discard_value = top_discard_card.get_score_value()
         deck_average = self._estimate_unknown_card_value()
         

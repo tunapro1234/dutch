@@ -100,7 +100,7 @@ class DutchCaboEnv(gym.Env):
         - 16: Do nothing / skip
     """
     
-    metadata = {"render_modes": ["human", "none"], "render_fps": 1}
+    metadata = {"render_modes": ["human", "none", "gui"], "render_fps": 1}
     
     def __init__(self, 
                  opponent_players: Optional[List[PlayerBase]] = None,
@@ -122,6 +122,17 @@ class DutchCaboEnv(gym.Env):
         self.reward_shaping = reward_shaping
         self.max_episodes = max_episodes
         self.episode_count = 0
+        
+        # GUI support
+        self.gui = None
+        if render_mode == "gui":
+            try:
+                from ..gui.simple_gui import SimpleGameGUI
+                self.gui = SimpleGameGUI("Dutch Cabo - RL Training")
+                self._setup_gui()
+            except ImportError:
+                print("Warning: GUI not available, falling back to human mode")
+                self.render_mode = "human"
         
         # Create default opponents if none provided
         if opponent_players is None:
@@ -414,6 +425,56 @@ class DutchCaboEnv(gym.Env):
         
         return observation, reward, game_ended, truncated, info
     
+    def _setup_gui(self):
+        """Setup GUI with players"""
+        if self.gui is None:
+            return
+            
+        # Add gym player first
+        self.gui.add_player(self.gym_player.name, is_gym_player=True)
+        
+        # Add opponents
+        for opponent in self.opponent_players:
+            self.gui.add_player(opponent.name, is_gym_player=False)
+        
+        # Start GUI in background
+        import threading
+        gui_thread = threading.Thread(target=self.gui.start_gui, daemon=True)
+        gui_thread.start()
+    
+    def _update_gui(self):
+        """Update GUI with current game state"""
+        if self.gui is None:
+            return
+            
+        try:
+            # Update game state
+            game_state = self.engine.get_game_state()
+            current_player = self.engine.get_current_player()
+            
+            gui_state = {
+                "turn_count": game_state.get("turn_count", 0),
+                "current_player": current_player.name if current_player else "",
+                "dutch_called": self.engine.dutch_called,
+                "deck_size": len(self.engine.deck),
+                "top_discard": str(self.engine.discard_pile[-1]) if self.engine.discard_pile else None
+            }
+            
+            self.gui.update_game_state(gui_state)
+            
+            # Update players
+            for player in self.all_players:
+                player_data = {
+                    "hand": [str(card) if card else None for card in player.hand],
+                    "known_cards": player.known_cards,
+                    "score": player.get_score(),
+                    "hand_size": player.get_hand_size()
+                }
+                self.gui.update_player(player.name, player_data)
+                
+        except Exception as e:
+            print(f"GUI update error: {e}")
+    
     def render(self):
         """Render the environment"""
         if self.render_mode == "human":
@@ -437,10 +498,17 @@ class DutchCaboEnv(gym.Env):
                 print(f"Discard Pile Top: {self.engine.discard_pile[-1]}")
             
             print("=" * 50)
+            
+        elif self.render_mode == "gui":
+            self._update_gui()
     
     def close(self):
         """Clean up environment"""
-        pass
+        if self.gui is not None:
+            try:
+                self.gui.close()
+            except:
+                pass
 
 
 # Register environment with Gymnasium

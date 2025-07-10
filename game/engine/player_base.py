@@ -174,6 +174,19 @@ class PlayerBase(ABC):
         pass
     
     @abstractmethod
+    def choose_own_swap_position(self, game_state: dict) -> int:
+        """
+        Choose which of your own cards to give away when using Jack.
+        
+        Args:
+            game_state: Current game state information
+            
+        Returns:
+            Position of your own card to swap (0-3)
+        """
+        pass
+    
+    @abstractmethod
     def choose_peek_target(self, opponents: List['PlayerBase'], game_state: dict) -> Tuple[Optional['PlayerBase'], int]:
         """
         Choose which card to peek at (when using Queen).
@@ -200,6 +213,20 @@ class PlayerBase(ABC):
         """
         # Default implementation: always draw from deck
         return "deck"
+    
+    def want_to_use_special_ability_after_swap(self, special_card: Card, game_state: dict) -> bool:
+        """
+        Ask if player wants to use special ability of a card that was swapped out.
+        
+        Args:
+            special_card: The special card that was swapped out
+            game_state: Current game state information
+            
+        Returns:
+            True if player wants to use the ability, False otherwise
+        """
+        # Default implementation for AI: always use special abilities
+        return True
     
     def want_to_discard_pile_matches(self, matches_available: List[Tuple[int, Card]], 
                                    top_discard_card: Card, timing: str, game_state: dict) -> Optional[List[int]]:

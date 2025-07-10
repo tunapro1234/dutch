@@ -55,6 +55,10 @@ class GameInterface:
             print(f"🚨 DUTCH CALLED by {self.engine.dutch_caller.name}! Final round in progress.")
         elif self.engine.final_round:
             print("🏁 Final round - game ending soon!")
+            
+        # DEBUG MODE: Show AI knowledge and reasoning
+        if hasattr(self, 'debug_mode') and self.debug_mode:
+            self._display_debug_info(current_player)
     
     def display_turn_start(self, player_name: str, turn_number: int):
         """Display turn start information"""
@@ -114,6 +118,10 @@ class GameInterface:
                 remaining_turns = action_result.get("remaining_turns", 0)
                 print(f"\n🚨 {player_name} called DUTCH! Final round begins!")
                 print(f"All other players ({remaining_turns}) get one more turn.")
+                
+        # DEBUG MODE: Show AI reasoning for this action
+        if hasattr(self, 'debug_mode') and self.debug_mode and action_type:
+            self._display_action_reasoning(player_name, action_type, action_result)
     
     def display_special_ability_result(self, player_name: str, ability_result: Dict[str, Any]):
         """Display special ability usage results"""
@@ -237,4 +245,123 @@ class GameInterface:
     
     def pause_for_user(self, message: str = "Press Enter to continue..."):
         """Pause execution until user presses Enter"""
-        input(message) 
+        input(message)
+    
+    def _display_debug_info(self, current_player: PlayerBase):
+        """Display debug information about AI knowledge and reasoning"""
+        print(f"\n{'🔍 DEBUG INFO':=^60}")
+        
+        # Find AI and Human players
+        ai_players = [p for p in self.engine.players if not isinstance(p, HumanPlayer)]
+        human_players = [p for p in self.engine.players if isinstance(p, HumanPlayer)]
+        
+        if not ai_players or not human_players:
+            print("❌ Debug mode requires Human vs AI setup")
+            return
+            
+        ai_player = ai_players[0]
+        human_player = human_players[0]
+        
+        # Show AI's knowledge about its own hand
+        print(f"\n🤖 {ai_player.name}'s Knowledge:")
+        print("Own hand:")
+        for i, card in enumerate(ai_player.hand):
+            if card is None:
+                print(f"  Position {i}: [ EMPTY ]")
+            elif ai_player.known_cards[i]:
+                print(f"  Position {i}: {card} ✅ (KNOWN)")
+            else:
+                print(f"  Position {i}: {card} ❓ (UNKNOWN to AI)")
+        
+        # Show what AI knows about human's hand
+        print(f"\n👤 What {ai_player.name} knows about {human_player.name}'s hand:")
+        for i, card in enumerate(human_player.hand):
+            if card is None:
+                print(f"  Position {i}: [ EMPTY ] ✅")
+            else:
+                # Check if AI has any knowledge about this card
+                ai_knows = False
+                known_info = "❓ Unknown"
+                
+                # For BayesPlayer, check if they have specific knowledge
+                if hasattr(ai_player, 'opponent_card_knowledge'):
+                    if human_player.name in ai_player.opponent_card_knowledge:
+                        if i in ai_player.opponent_card_knowledge[human_player.name]:
+                            knowledge = ai_player.opponent_card_knowledge[human_player.name][i]
+                            if knowledge.get('known', False):
+                                ai_knows = True
+                                known_info = f"✅ Knows: {knowledge.get('card', 'Unknown')}"
+                
+                print(f"  Position {i}: {card} → {known_info}")
+        
+        # Show AI's strategy reasoning if available
+        if hasattr(ai_player, 'get_strategy_info'):
+            strategy_info = ai_player.get_strategy_info()
+            if strategy_info:
+                print(f"\n🧠 {ai_player.name}'s Current Strategy:")
+                print(f"  {strategy_info}")
+        
+        # Show probability calculations for BayesPlayer
+        if hasattr(ai_player, 'card_probabilities'):
+            print(f"\n📊 {ai_player.name}'s Card Probability Estimates:")
+            print("Own hand probabilities:")
+            for i, probs in enumerate(ai_player.card_probabilities):
+                if ai_player.hand[i] is not None and not ai_player.known_cards[i]:
+                    top_values = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:3]
+                    prob_str = ", ".join([f"{val}:{prob:.1%}" for val, prob in top_values])
+                    print(f"  Position {i}: {prob_str}")
+        
+        print("="*60) 
+    
+    def _display_action_reasoning(self, player_name: str, action_type: str, action_result: Dict[str, Any]):
+        """Display AI reasoning for their action choice"""
+        # Only show for AI players
+        ai_player = None
+        for player in self.engine.players:
+            if player.name == player_name and not isinstance(player, HumanPlayer):
+                ai_player = player
+                break
+                
+        if not ai_player:
+            return  # Skip for human players
+            
+        print(f"\n🧠 {player_name}'s Reasoning:")
+        
+        if action_type == "discard":
+            print(f"  💭 Decided to discard instead of swapping")
+            print(f"  📝 Likely reasons: Drew high-value card, or satisfied with current hand")
+            
+        elif action_type == "swap":
+            position = action_result.get("position", "?")
+            swapped_card = action_result.get("swapped_card", "?")
+            print(f"  💭 Swapped at position {position}, removed {swapped_card}")
+            
+            # Try to get reasoning from AI if available
+            if hasattr(ai_player, 'last_decision_reason'):
+                print(f"  📝 AI says: {ai_player.last_decision_reason}")
+            else:
+                print(f"  📝 Likely improved hand value by removing {swapped_card}")
+                
+        elif action_type == "use_ability":
+            print(f"  💭 Used special card ability")
+            if "jack_result" in action_result:
+                jack_result = action_result["jack_result"]
+                if jack_result.get("swap_performed"):
+                    target = jack_result.get("target_player", "?")
+                    print(f"  📝 Jack swap with {target} to gain information or improve position")
+            elif "queen_result" in action_result:
+                queen_result = action_result["queen_result"]
+                if queen_result.get("peek_performed"):
+                    target = queen_result.get("target", "?")
+                    print(f"  📝 Queen peek at {target} to gather information")
+                    
+        elif action_type == "call_dutch":
+            print(f"  💭 Called DUTCH to end the game")
+            print(f"  📝 AI believes it has the lowest score")
+            
+        # Show score analysis if available
+        if hasattr(ai_player, 'get_score'):
+            current_score = ai_player.get_score()
+            print(f"  📊 Current estimated score: {current_score}")
+            
+        print("  " + "-"*40) 

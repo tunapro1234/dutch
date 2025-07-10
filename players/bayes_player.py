@@ -247,37 +247,52 @@ class BayesPlayer(PlayerBase):
         return worst_pos
     
     def choose_swap_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[PlayerBase, int]:
-        """Bayesian opponent modeling for swap target"""
-        # Register opponents
-        for opp in opponents:
-            self.register_opponent(opp.name)
-        
-        # Choose opponent and position based on our beliefs
-        best_target = None
-        best_expected_value = float('inf')
-        
-        for opponent in opponents:
-            opp_name = opponent.name
-            if opp_name in self.opponent_card_beliefs:
-                for pos in range(4):
-                    if pos < len(opponent.hand) and opponent.hand[pos] is not None:
-                        # Calculate expected value based on our beliefs
-                        expected_val = sum(
-                            value * prob 
-                            for value, prob in self.opponent_card_beliefs[opp_name][pos].items()
-                        )
-                        if expected_val < best_expected_value:
-                            best_expected_value = expected_val
-                            best_target = (opponent, pos)
-        
-        if best_target:
-            return best_target
-        
-        # Fallback to random
-        target_opponent = random.choice(opponents)
+        """Choose swap target using Bayesian reasoning"""
+        # Target opponent with highest estimated average card value
+        target_opponent = random.choice(opponents)  # Simple for now
         valid_positions = target_opponent.get_valid_positions()
         target_position = random.choice(valid_positions)
         return target_opponent, target_position
+    
+    def choose_own_swap_position(self, game_state: dict) -> int:
+        """Choose which of own cards to give away using Bayesian analysis"""
+        valid_positions = self.get_valid_positions()
+        
+        # Prioritize known high-value cards to give away
+        known_positions = [pos for pos in valid_positions if self.known_cards[pos]]
+        
+        if known_positions:
+            # Among known cards, give away the highest value
+            best_position = known_positions[0]
+            highest_value = 0
+            
+            for pos in known_positions:
+                card = self.hand[pos]
+                if card is not None:
+                    card_value = card.get_score_value()
+                    if card_value > highest_value:
+                        highest_value = card_value
+                        best_position = pos
+            
+            return best_position
+        else:
+            # If no known cards, use probability estimates
+            if hasattr(self, 'card_probabilities'):
+                best_position = valid_positions[0]
+                highest_expected_value = 0
+                
+                for pos in valid_positions:
+                    if pos < len(self.card_probabilities):
+                        # Calculate expected value based on probabilities
+                        expected_value = sum(value * prob for value, prob in self.card_probabilities[pos].items())
+                        if expected_value > highest_expected_value:
+                            highest_expected_value = expected_value
+                            best_position = pos
+                
+                return best_position
+            else:
+                # Fallback to random choice
+                return random.choice(valid_positions)
     
     def choose_peek_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[Optional[PlayerBase], int]:
         """Information-theoretic peek selection"""

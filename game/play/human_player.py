@@ -106,6 +106,24 @@ class HumanPlayer(PlayerBase):
             except ValueError:
                 print("Please enter a valid number.")
     
+    def choose_own_swap_position(self, game_state: dict) -> int:
+        """Let human choose which of their own cards to give away when using Jack"""
+        print(f"\n👋 Choose which of YOUR cards to give away:")
+        print(f"Your hand: {self.display_hand()}")
+        
+        valid_positions = self.get_valid_positions()
+        print(f"Valid positions: {valid_positions}")
+        
+        while True:
+            try:
+                pos = int(input("Choose your position to give away (0-3): "))
+                if pos in valid_positions:
+                    return pos
+                else:
+                    print("Invalid position. Please choose a valid position.")
+            except ValueError:
+                print("Please enter a valid number.")
+    
     def choose_peek_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[Optional[PlayerBase], int]:
         """Let human choose peek target for Queen ability"""
         print("\nChoose what to peek at:")
@@ -196,3 +214,25 @@ class HumanPlayer(PlayerBase):
                         print(f"Please choose 0, A, or 1-{len(matches_available)}")
             except ValueError:
                 print("Please enter a valid option.") 
+    
+    def want_to_use_special_ability_after_swap(self, special_card: Card, game_state: dict) -> bool:
+        """Ask human if they want to use special ability of a card that was swapped out"""
+        print(f"\n🃏 You swapped out a {special_card}!")
+        
+        if special_card.is_jack():
+            print("⚡ Jack allows you to swap cards with an opponent!")
+        elif special_card.is_queen():
+            print("⚡ Queen allows you to peek at any card!")
+        
+        while True:
+            try:
+                choice = input("Do you want to use this special ability? (y/n): ").strip().lower()
+                if choice in ['y', 'yes', '1']:
+                    return True
+                elif choice in ['n', 'no', '0']:
+                    return False
+                else:
+                    print("Please enter 'y' for yes or 'n' for no.")
+            except (ValueError, EOFError, KeyboardInterrupt):
+                print("Invalid input. Please try again.")
+                return False 
