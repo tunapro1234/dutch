@@ -63,6 +63,8 @@ def show_help():
     print("3. Auto Battle: Multiple games with statistics")
     print("4. AI vs Human: AI plays while you execute moves")
     print("5. Full Setup: Custom player configuration")
+    print("6. Real Life GUI: AI vs Human with visual display")
+    print("7. Quick Play GUI: AI vs AI with visual display")
     print()
     
     print("CARD INPUT FORMAT (when needed):")

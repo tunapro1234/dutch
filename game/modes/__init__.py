@@ -8,6 +8,8 @@ from .auto_battle import auto_battle
 from .ai_vs_human import ai_vs_human_mode
 from .full_setup import full_setup
 from .help_mode import show_help
+from .real_life_gui import real_life_gui_mode
+from .quick_play_gui import quick_play_gui
 
 __all__ = [
     "quick_play",
@@ -15,5 +17,7 @@ __all__ = [
     "auto_battle",
     "ai_vs_human_mode",
     "full_setup",
-    "show_help"
+    "show_help",
+    "real_life_gui_mode",
+    "quick_play_gui"
 ] 

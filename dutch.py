@@ -17,7 +17,9 @@ from game.modes import (
     auto_battle,
     ai_vs_human_mode,
     full_setup,
-    show_help
+    show_help,
+    real_life_gui_mode,
+    quick_play_gui
 )
 
 
@@ -25,7 +27,8 @@ def main():
     """Main entry point - parse arguments and route to appropriate mode"""
     parser = argparse.ArgumentParser(description="Dutch Cabo Card Game")
     parser.add_argument("--mode", "-m", 
-                       choices=["quick", "agent", "battle", "ai-human", "setup", "help"],
+                       choices=["quick", "agent", "battle", "ai-human", "setup", "help", 
+                               "real-life-gui", "quick-play-gui"],
                        help="Game mode to run")
     
     args = parser.parse_args()
@@ -42,6 +45,10 @@ def main():
         full_setup()
     elif args.mode == "help":
         show_help()
+    elif args.mode == "real-life-gui":
+        real_life_gui_mode()
+    elif args.mode == "quick-play-gui":
+        quick_play_gui()
     else:
         # Show interactive menu
         show_menu()
@@ -61,10 +68,12 @@ def show_menu():
         print("4. AI vs Human - AI plays, you execute moves")
         print("5. Full Setup - Custom player configuration")
         print("6. Help - Rules and instructions")
-        print("7. Exit")
+        print("7. Real Life GUI - AI vs Human with visual display")
+        print("8. Quick Play GUI - AI vs AI with visual display")
+        print("9. Exit")
         print()
         
-        choice = input("Enter your choice (1-7): ").strip()
+        choice = input("Enter your choice (1-9): ").strip()
         
         try:
             if choice == "1":
@@ -80,10 +89,14 @@ def show_menu():
             elif choice == "6":
                 show_help()
             elif choice == "7":
+                real_life_gui_mode()
+            elif choice == "8":
+                quick_play_gui()
+            elif choice == "9":
                 print("Thanks for playing!")
                 break
             else:
-                print("Invalid choice! Please enter 1-7.")
+                print("Invalid choice! Please enter 1-9.")
                 
         except KeyboardInterrupt:
             print("\nGame interrupted. Returning to menu...")
