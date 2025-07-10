@@ -1,0 +1,31 @@
+# Cursor Coding Rules
+
+## 1. Code Quality & Structure
+- Do **not** write dummy, mock, fake, or placeholder code. Only implement real, meaningful logic.
+- If a file starts to exceed **300 lines**, split it into separate modules.
+- Functions and classes should remain short and focused — follow the single responsibility principle.
+- For every code block you write, clearly explain:
+  - Why you implemented it this way
+  - What the alternatives were
+  - Why you chose not to use those alternatives
+
+## 2. Communication & Approval Flow
+- If a **major system** is being added or a **large architectural change** is needed, **ask me first** — "How should we approach this?"
+- Stay within the **scope of the MVP** — avoid feature creep and unnecessary expansion.
+- Before writing any code, make sure you understand the **purpose of the project**. If in doubt, ask for clarification.
+
+## 3. File & Folder Organization
+- Place all executable scripts (CLI tools, startup files, etc.) in the `scripts/` directory — **never in the project root**.
+- Place all test files in the `test/` directory.
+- Avoid clutter in the root directory: no throwaway files, test files, or scripts outside their respective folders.
+- Do not write speculative "for later" utilities or boilerplate unless they are immediately necessary.
+
+## 4. Managing File Size & Complexity
+- If a file grows too large (especially controllers or classes), split it cleanly and modularly.
+- Use folders like `utils/`, `services/`, `models/`, `components/` **only when needed**, not preemptively.
+
+## 5. Explanation Requirement
+For **every code block**, you must explain:
+  - What it does
+  - Why it is implemented this way
+  - What other approaches were considered and why this one was chosen
