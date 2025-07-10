@@ -115,7 +115,7 @@ def select_dqrn_checkpoint() -> Optional[str]:
     return latest_checkpoint
 
 
-def load_dqrn_agent(checkpoint_path: str, name: str, device: str = "cuda") -> Optional[DQRNAgent]:
+def load_dqrn_agent(checkpoint_path: str, name: str, device: str = "cuda"):
     """Load DQRN agent from checkpoint"""
     if not DQRN_AVAILABLE:
         print("❌ DQRN not available")
