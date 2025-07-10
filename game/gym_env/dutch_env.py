@@ -76,6 +76,24 @@ class DutchCaboGymPlayer(PlayerBase):
         if unknown_positions:
             return None, random.choice(unknown_positions)
         return None, 0
+    
+    def choose_own_swap_position(self, game_state: dict) -> int:
+        """Choose own card position to give away in Jack swap"""
+        if self.pending_action and "own_swap_position" in self.pending_action:
+            return self.pending_action["own_swap_position"]
+        
+        # Fallback: give away highest known card, prefer corners
+        best_position = 0
+        best_value = -1
+        
+        for i in [0, 3, 1, 2]:  # Prefer corners
+            if i < len(self.hand) and self.hand[i] is not None and self.known_cards[i]:
+                card_value = self.hand[i].get_score_value()
+                if card_value > best_value:
+                    best_value = card_value
+                    best_position = i
+        
+        return best_position
 
 
 class DutchCaboEnv(gym.Env):
@@ -89,15 +107,14 @@ class DutchCaboEnv(gym.Env):
         Total: 36 dimensional observation space
     
     Action Space:
-        Discrete(N) where actions are encoded as integers:
+        Discrete(16) where actions are encoded as integers:
         - 0-3: Draw from deck + swap with position 0-3
         - 4-7: Draw from discard + swap with position 0-3  
         - 8: Draw from deck + discard
-        - 9: Draw from discard + discard (if allowed)
-        - 10: Draw + use special ability
-        - 11: Call Dutch
-        - 12-15: Discard matching cards from positions 0-3
-        - 16: Do nothing / skip
+        - 9: Use special ability (Jack/Queen)
+        - 10: Call Dutch
+        - 11-14: Discard matching cards from positions 0-3
+        - 15: Skip/fallback action
     """
     
     metadata = {"render_modes": ["human", "none", "gui"], "render_fps": 1}
@@ -169,8 +186,8 @@ class DutchCaboEnv(gym.Env):
             dtype=np.float32
         )
         
-        # Define action space (17 possible actions)
-        self.action_space = spaces.Discrete(17)
+        # Define action space (16 possible actions)
+        self.action_space = spaces.Discrete(16)
         
         # Tracking variables
         self.current_step = 0
@@ -240,7 +257,7 @@ class DutchCaboEnv(gym.Env):
         Decode integer action to game action dictionary
         
         Args:
-            action: Integer action from 0-16
+            action: Integer action from 0-15
             
         Returns:
             Game action dictionary
@@ -263,21 +280,18 @@ class DutchCaboEnv(gym.Env):
             # Draw from deck + discard
             return {"action": "discard", "draw_source": "deck"}
         elif action == 9:
-            # Draw from discard + discard
-            return {"action": "discard", "draw_source": "discard"}
-        elif action == 10:
             # Use special ability
             return {"action": "use_ability"}
-        elif action == 11:
+        elif action == 10:
             # Call Dutch
             return {"action": "call_dutch"}
-        elif 12 <= action <= 15:
+        elif 11 <= action <= 14:
             # Discard matching cards
             return {
                 "action": "discard_matches",
-                "position": action - 12
+                "position": action - 11
             }
-        else:  # action == 16
+        else:  # action == 15
             # Skip/do nothing (fallback to discard)
             return {"action": "discard"}
     

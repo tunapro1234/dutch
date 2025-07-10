@@ -276,13 +276,13 @@ class BayesPlayer(PlayerBase):
             
             return best_position
         else:
-            # If no known cards, use probability estimates
-            if hasattr(self, 'card_probabilities'):
+            # If no known cards, use probability estimates with safe access
+            if hasattr(self, 'card_probabilities') and self.card_probabilities:
                 best_position = valid_positions[0]
                 highest_expected_value = 0
                 
                 for pos in valid_positions:
-                    if pos < len(self.card_probabilities):
+                    if pos in self.card_probabilities:
                         # Calculate expected value based on probabilities
                         expected_value = sum(value * prob for value, prob in self.card_probabilities[pos].items())
                         if expected_value > highest_expected_value:
