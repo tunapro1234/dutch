@@ -4,10 +4,9 @@ Dutch Cabo - Main Entry Point
 
 Usage:
     python dutch.py --quick-play              # Quick human vs AI game
-    python dutch.py --agent-vs-agent          # Watch two AIs play
+    python dutch.py --agent-vs-agent          # Watch two AIs play (interactive)
+    python dutch.py --auto-battle [agent1] [agent2] [num_games]  # Automated AI battles
     python dutch.py --full-setup              # Full game setup
-    python dutch.py --test-system             # Test DQRN system
-    python dutch.py --test-gpu                # Test GPU setup
 """
 
 import argparse
@@ -15,136 +14,14 @@ import sys
 import time
 import multiprocessing as mp
 import os
-from typing import List, Dict, Optional
+from typing import List, Optional
 
-# Game imports
-from src.game import Game
-from src.player import Player, HumanPlayer
+# Game imports - Updated for new architecture
+from game.engine import GameEngine, PlayerBase
+from game.play import HumanPlayer, GameRunner
 from players.simple_ai import SimpleAI
 from players.bayes_player import BayesPlayer
-
-# DQRN imports (optional, only if available)
-try:
-    import torch
-    from players.dqrn_multi_head.dqrn_network import create_dqrn_network
-    from players.dqrn_multi_head.training import DQRNAgent
-    DQRN_AVAILABLE = True
-except ImportError:
-    DQRN_AVAILABLE = False
-    print("ℹ️  DQRN not available (PyTorch not installed)")
-
-
-def list_dqrn_training_runs() -> Dict[str, List[str]]:
-    """List available DQRN training runs and their checkpoints"""
-    base_dir = "players/dqrn_multi_head/checkpoints"
-    training_runs = {}
-    
-    if not os.path.exists(base_dir):
-        return {}
-    
-    for folder in os.listdir(base_dir):
-        folder_path = os.path.join(base_dir, folder)
-        if os.path.isdir(folder_path):
-            checkpoints = []
-            for file in os.listdir(folder_path):
-                if file.endswith('.pt'):
-                    checkpoints.append(os.path.join(folder_path, file))
-            
-            if checkpoints:
-                training_runs[folder] = sorted(checkpoints, key=os.path.getmtime, reverse=True)
-    
-    return training_runs
-
-
-def list_dqrn_checkpoints() -> List[str]:
-    """List all available DQRN checkpoints (backward compatibility)"""
-    training_runs = list_dqrn_training_runs()
-    all_checkpoints = []
-    
-    for run_name, checkpoints in training_runs.items():
-        all_checkpoints.extend(checkpoints)
-    
-    return sorted(all_checkpoints, key=os.path.getmtime, reverse=True)
-
-
-def select_dqrn_checkpoint() -> Optional[str]:
-    """Let user select a DQRN checkpoint by training run"""
-    training_runs = list_dqrn_training_runs()
-    
-    if not training_runs:
-        print("❌ No DQRN training runs found!")
-        print(f"Train a model first using: python train_dqrn.py --name <training_name>")
-        return None
-    
-    print("\nAvailable DQRN training runs:")
-    run_names = list(training_runs.keys())
-    
-    for i, run_name in enumerate(run_names):
-        checkpoints = training_runs[run_name]
-        latest_checkpoint = checkpoints[0]  # Already sorted by time
-        
-        try:
-            # Get info from latest checkpoint
-            checkpoint_data = torch.load(latest_checkpoint, map_location='cpu')
-            episode = checkpoint_data.get('episode', 'Unknown')
-            steps = checkpoint_data.get('step_count', 'Unknown')
-            print(f"{i + 1}. {run_name} (Latest: Episode {episode}, Steps {steps}, {len(checkpoints)} checkpoints)")
-        except:
-            print(f"{i + 1}. {run_name} ({len(checkpoints)} checkpoints)")
-    
-    # Select training run
-    while True:
-        try:
-            choice = input(f"\nSelect training run (1-{len(run_names)}): ").strip()
-            idx = int(choice) - 1
-            if 0 <= idx < len(run_names):
-                selected_run = run_names[idx]
-                break
-            else:
-                print(f"Please enter a number between 1 and {len(run_names)}")
-        except ValueError:
-            print("Please enter a valid number")
-        except KeyboardInterrupt:
-            return None
-    
-    # Use the latest checkpoint from selected run
-    selected_checkpoints = training_runs[selected_run]
-    latest_checkpoint = selected_checkpoints[0]
-    
-    print(f"🎯 Selected: {selected_run} - {os.path.basename(latest_checkpoint)}")
-    return latest_checkpoint
-
-
-def load_dqrn_agent(checkpoint_path: str, name: str, device: str = "cuda"):
-    """Load DQRN agent from checkpoint"""
-    if not DQRN_AVAILABLE:
-        print("❌ DQRN not available")
-        return None
-    
-    try:
-        # Create network
-        network = create_dqrn_network(device)
-        
-        # Load checkpoint
-        checkpoint = torch.load(checkpoint_path, map_location=device)
-        network.load_state_dict(checkpoint["policy_net"])
-        network.eval()
-        
-        # Create agent
-        agent = DQRNAgent(network, device)
-        agent.name = name
-        agent.epsilon = 0.0  # No exploration during play
-        
-        print(f"✅ DQRN model loaded: {os.path.basename(checkpoint_path)}")
-        episode = checkpoint.get('episode', 'Unknown')
-        steps = checkpoint.get('step_count', 'Unknown')
-        print(f"   Training: Episode {episode}, Steps {steps}")
-        
-        return agent
-        
-    except Exception as e:
-        print(f"❌ Failed to load DQRN model: {e}")
-        return None
+from players.bayes.smart_bayes import SmartBayesPlayer
 
 
 def quick_play():
@@ -156,15 +33,13 @@ def quick_play():
     print("\nSelect AI opponent:")
     print("1. SimpleAI - Rule-based AI")
     print("2. BayesPlayer - Advanced Bayesian AI")
-    if DQRN_AVAILABLE:
-        print("3. DQRN - Neural Network AI (trained model)")
+    print("3. SmartBayesPlayer - New Enhanced AI")
     
-    max_choice = 3 if DQRN_AVAILABLE else 2
     while True:
-        choice = input(f"\nSelect AI opponent (1-{max_choice}): ").strip()
-        if choice in [str(i) for i in range(1, max_choice + 1)]:
+        choice = input("\nSelect AI opponent (1-3): ").strip()
+        if choice in ["1", "2", "3"]:
             break
-        print(f"Please enter a number between 1 and {max_choice}")
+        print("Please enter 1, 2, or 3")
     
     # Create players
     human = HumanPlayer("You")
@@ -173,36 +48,131 @@ def quick_play():
         ai = SimpleAI("SimpleAI")
     elif choice == "2":
         ai = BayesPlayer("BayesAI")
-    elif choice == "3" and DQRN_AVAILABLE:
-        checkpoint_path = select_dqrn_checkpoint()
-        if not checkpoint_path:
-            print("❌ No DQRN checkpoint selected, falling back to BayesAI")
-            ai = BayesPlayer("BayesAI")
-        else:
-            ai = load_dqrn_agent(checkpoint_path, "DQRN_AI")
-            if not ai:
-                print("❌ Failed to load DQRN, falling back to BayesAI")
-                ai = BayesPlayer("BayesAI")
-            else:
-                # Enable debug mode for human vs DQRN games
-                ai._debug_mode = True
+    else:
+        ai = SmartBayesPlayer("SmartBayesAI")
     
     print(f"\n🥊 {human.name} vs {ai.name}")
     print("=" * 50)
     
     # Create and run game
-    game = Game([human, ai])
-    game.play_game()
-    winner = game.winner
+    game_runner = GameRunner([human, ai])
+    game_runner.play_game()
+
+
+def auto_battle(agent1_choice=None, agent2_choice=None, num_games=100):
+    """Automated AI vs AI battles with optional player selection"""
+    print("🤖 Dutch Cabo - Auto Battle Mode")
+    print("=" * 50)
     
-    if winner:
-        print(f"\n🏆 Winner: {winner.name}")
-        if winner == human:
-            print("🎉 Congratulations! You won!")
-        else:
-            print("🤖 AI wins this time!")
+    # Use defaults if not provided: SmartBayes vs Bayes (newer vs older)
+    if agent1_choice is None:
+        agent1_choice = "3"  # SmartBayesPlayer (newer)
+    if agent2_choice is None:
+        agent2_choice = "2"  # BayesPlayer (older)
+    
+    # Convert to string if passed as int
+    agent1_choice = str(agent1_choice)
+    agent2_choice = str(agent2_choice)
+    
+    # Validate choices
+    if agent1_choice not in ["1", "2", "3"] or agent2_choice not in ["1", "2", "3"]:
+        print("❌ Invalid agent selection! Use 1 (SimpleAI), 2 (BayesPlayer), or 3 (SmartBayesPlayer)")
+        return
+    
+    verbose = False  # Silent mode for speed
+    
+    # Create agents
+    agent1 = create_agent(agent1_choice, "Player1")
+    agent2 = create_agent(agent2_choice, "Player2")
+    
+    if not agent1 or not agent2:
+        raise ValueError("Failed to create agents!")
+    
+    # Show agent names for clarity
+    agent_names = {
+        "1": "SimpleAI",
+        "2": "BayesPlayer", 
+        "3": "SmartBayesPlayer"
+    }
+    
+    print(f"🥊 {agent_names[agent1_choice]} vs {agent_names[agent2_choice]}")
+    print(f"🎮 Running {num_games} games automatically...")
+    
+    # Start timing
+    start_time = time.time()
+    
+    results = {agent1.name: 0, agent2.name: 0}
+    dutch_calls = {agent1.name: 0, agent2.name: 0}  # Track Dutch calls
+    
+    # Run games in silent mode
+    for game_num in range(num_games):
+        # Create fresh agents for each game
+        agent1_fresh = create_agent(agent1_choice, "Player1")
+        agent2_fresh = create_agent(agent2_choice, "Player2")
+        
+        if not agent1_fresh or not agent2_fresh:
+            raise ValueError(f"Failed to create agents for game {game_num + 1}")
+        
+        # Create engine for silent mode
+        engine = GameEngine([agent1_fresh, agent2_fresh])
+        
+        # Setup and play game
+        engine.setup_new_game()
+        
+        while not engine.game_over:
+            turn_result = engine.play_turn()
+            if turn_result.get("game_ended"):
+                break
+        
+        # Get results
+        final_results = engine.get_final_results()
+        winner_name = final_results.get("winner")
+        if winner_name:
+            if winner_name in results:
+                results[winner_name] += 1
+        
+        # Track Dutch calls
+        if engine.dutch_called and engine.dutch_caller:
+            caller_name = engine.dutch_caller.name
+            if caller_name in dutch_calls:
+                dutch_calls[caller_name] += 1
+    
+    # End timing
+    end_time = time.time()
+    total_duration = end_time - start_time
+    
+    # Show final results
+    print(f"\n📊 Auto Battle Results ({num_games} games):")
+    print("=" * 40)
+    for agent_name, wins in results.items():
+        win_rate = (wins / num_games) * 100 if num_games > 0 else 0
+        dutch_count = dutch_calls.get(agent_name, 0)
+        dutch_rate = (dutch_count / num_games) * 100 if num_games > 0 else 0
+        print(f"{agent_name}: {wins} wins ({win_rate:.1f}%) | {dutch_count} dutch calls ({dutch_rate:.1f}%)")
+    
+    # Show Dutch call statistics
+    total_dutch_calls = sum(dutch_calls.values())
+    print(f"\n🔔 Dutch Call Statistics:")
+    print("=" * 40)
+    print(f"Total Dutch calls: {total_dutch_calls}")
+    for agent_name, dutch_count in dutch_calls.items():
+        dutch_rate = (dutch_count / total_dutch_calls) * 100 if total_dutch_calls > 0 else 0
+        print(f"{agent_name}: {dutch_count} calls ({dutch_rate:.1f}% of all Dutch calls)")
+    
+    # Determine overall winner
+    sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
+    if len(sorted_results) >= 2 and sorted_results[0][1] > sorted_results[1][1]:
+        print(f"\n🏆 Overall Winner: {sorted_results[0][0]} ({sorted_results[0][1]} wins)")
     else:
-        print("🤔 Game ended without a clear winner")
+        print(f"\n🤝 It's a tie!")
+    
+    # Show timing information
+    if num_games > 0:
+        avg_game_time = total_duration / num_games
+        print(f"\n⏱️ Performance:")
+        print(f"Total time: {total_duration:.2f} seconds")
+        print(f"Average per game: {avg_game_time:.3f} seconds")
+        print(f"Games per second: {1 / avg_game_time:.1f}")
 
 
 def agent_vs_agent():
@@ -214,22 +184,19 @@ def agent_vs_agent():
     print("\nAvailable agents:")
     print("1. SimpleAI - Rule-based AI")
     print("2. BayesPlayer - Advanced Bayesian AI")
-    if DQRN_AVAILABLE:
-        print("3. DQRN - Neural Network AI (trained model)")
-    
-    max_choice = 3 if DQRN_AVAILABLE else 2
+    print("3. SmartBayesPlayer - New Enhanced AI")
     
     while True:
-        agent1_choice = input(f"\nSelect Agent 1 (1-{max_choice}): ").strip()
-        if agent1_choice in [str(i) for i in range(1, max_choice + 1)]:
+        agent1_choice = input("\nSelect Agent 1 (1-3): ").strip()
+        if agent1_choice in ["1", "2", "3"]:
             break
-        print(f"Please enter a number between 1 and {max_choice}")
+        print("Please enter 1, 2, or 3")
     
     while True:
-        agent2_choice = input(f"Select Agent 2 (1-{max_choice}): ").strip()
-        if agent2_choice in [str(i) for i in range(1, max_choice + 1)]:
+        agent2_choice = input("Select Agent 2 (1-3): ").strip()
+        if agent2_choice in ["1", "2", "3"]:
             break
-        print(f"Please enter a number between 1 and {max_choice}")
+        print("Please enter 1, 2, or 3")
     
     # Create agents
     agent1 = create_agent(agent1_choice, "Agent1")
@@ -255,19 +222,25 @@ def agent_vs_agent():
     # Start timing
     start_time = time.time()
     
-    # Calculate parallelization strategy
-    cpu_cores = os.cpu_count() or 4
-    num_workers, batch_size = calculate_parallel_strategy(num_games, cpu_cores)
-    
-    print(f"\n🚀 Parallel Strategy: {num_workers} workers, ~{batch_size} games per batch")
-    print(f"💻 CPU cores: {cpu_cores}, Using: {num_workers}")
-    
     results = {"Agent1": 0, "Agent2": 0}
     
-    if verbose or num_workers == 1:
-        # Single-threaded execution (verbose mode or small batch)
+    if verbose and num_games == 1:
+        # Single game with full output
+        game_runner = GameRunner([agent1, agent2])
+        game_runner.play_game()
+        
+        # Determine winner based on final scores
+        final_results = game_runner.engine.get_final_results()
+        winner_name = final_results.get("winner")
+        if winner_name:
+            if winner_name == agent1.name:
+                results["Agent1"] = 1
+            else:
+                results["Agent2"] = 1
+    else:
+        # Multiple games or silent mode
         for game_num in range(num_games):
-            if num_games > 1:
+            if verbose:
                 print(f"\n🎲 Game {game_num + 1}/{num_games}")
                 print("-" * 30)
             
@@ -275,69 +248,42 @@ def agent_vs_agent():
             agent1_fresh = create_agent(agent1_choice, "Agent1")
             agent2_fresh = create_agent(agent2_choice, "Agent2")
             
-            game = Game([agent1_fresh, agent2_fresh])
+            if not agent1_fresh or not agent2_fresh:
+                print(f"Error creating agents for game {game_num + 1}")
+                continue
             
-            if not verbose:
-                # Suppress output for multi-game runs
-                import io
-                import contextlib
-                f = io.StringIO()
-                with contextlib.redirect_stdout(f):
-                    game.play_game()
-                winner = game.winner
-            else:
-                game.play_game()
-                winner = game.winner
+            # Create engine for silent mode
+            engine = GameEngine([agent1_fresh, agent2_fresh])
             
-            # Track results
-            if winner:
-                results[winner.name] += 1
+            # Setup and play game
+            engine.setup_new_game()
+            
+            while not engine.game_over:
+                turn_result = engine.play_turn()
+                if turn_result.get("game_ended"):
+                    break
+                
+            # Get results
+            final_results = engine.get_final_results()
+            winner_name = final_results.get("winner")
+            if winner_name:
+                if winner_name == "Agent1":
+                    results["Agent1"] += 1
+                else:
+                    results["Agent2"] += 1
             
             if verbose:
-                print(f"🏆 Winner: {winner.name}")
-    
-    else:
-        # Multi-threaded execution
-        print(f"⚡ Running {num_games} games in parallel...")
-        
-        # Prepare batches for parallel execution
-        batches = []
-        games_assigned = 0
-        
-        for worker_id in range(num_workers):
-            if games_assigned >= num_games:
-                break
-                
-            # Calculate actual batch size for this worker
-            remaining_games = num_games - games_assigned
-            actual_batch_size = min(batch_size, remaining_games)
-            
-            if actual_batch_size > 0:
-                batches.append((agent1_choice, agent2_choice, actual_batch_size, games_assigned + 1))
-                games_assigned += actual_batch_size
-        
-        # Run batches in parallel
-        with mp.Pool(processes=num_workers) as pool:
-            batch_results = pool.map(run_game_batch, batches)
-        
-        # Merge results from all batches
-        for batch_result in batch_results:
-            batch_wins = batch_result["results"]
-            results["Agent1"] += batch_wins["Agent1"]
-            results["Agent2"] += batch_wins["Agent2"]
-        
-        print(f"✅ Completed {sum(results.values())} games across {len(batches)} batches")
+                print(f"🏆 Winner: {winner_name}")
     
     # End timing
     end_time = time.time()
     total_duration = end_time - start_time
-    avg_game_time = total_duration / num_games
     
     # Show final results
     print(f"\n📊 Final Results ({num_games} games):")
     print("=" * 40)
     for agent_name, wins in results.items():
-        win_rate = (wins / num_games) * 100
+        win_rate = (wins / num_games) * 100 if num_games > 0 else 0
         print(f"{agent_name}: {wins} wins ({win_rate:.1f}%)")
     
     # Determine overall winner
@@ -349,120 +295,23 @@ def agent_vs_agent():
         print(f"\n🤝 It's a tie!")
     
     # Show timing information
-    print(f"\n⏱️ Performance:")
-    print(f"Total time: {total_duration:.2f} seconds")
-    print(f"Average per game: {avg_game_time:.4f} seconds")
-    print(f"Games per minute: {60 / avg_game_time:.1f}")
-    print(f"Games per second: {1 / avg_game_time:.1f}")
-    
-    if num_workers > 1:
-        theoretical_speedup = num_workers
-        print(f"🚀 Parallel execution with {num_workers} workers")
-        print(f"Theoretical max speedup: {theoretical_speedup:.1f}x")
-        # Estimate single-threaded performance for comparison
-        estimated_single_thread_time = total_duration * num_workers
-        actual_speedup = estimated_single_thread_time / total_duration if total_duration > 0 else 1
-        print(f"Estimated speedup achieved: {actual_speedup:.1f}x")
-        efficiency = (actual_speedup / theoretical_speedup) * 100 if theoretical_speedup > 0 else 0
-        print(f"Parallel efficiency: {efficiency:.1f}%")
+    if num_games > 0:
+        avg_game_time = total_duration / num_games
+        print(f"\n⏱️ Performance:")
+        print(f"Total time: {total_duration:.2f} seconds")
+        print(f"Average per game: {avg_game_time:.3f} seconds")
 
 
-def create_agent(choice: str, name: str) -> Optional[Player]:
+def create_agent(choice: str, name: str) -> Optional[PlayerBase]:
     """Create an agent based on user choice"""
     if choice == "1":
         return SimpleAI(name)
     elif choice == "2":
         return BayesPlayer(name)
-    elif choice == "3" and DQRN_AVAILABLE:
-        print(f"\nSetting up DQRN for {name}...")
-        checkpoint_path = select_dqrn_checkpoint()
-        if checkpoint_path:
-            agent = load_dqrn_agent(checkpoint_path, name)
-            if agent:
-                return agent
-        
-        print(f"❌ Failed to load DQRN for {name}, falling back to BayesPlayer")
-        return BayesPlayer(name)
+    elif choice == "3":
+        return SmartBayesPlayer(name)
     else:
         return None
-
-
-def calculate_parallel_strategy(num_games: int, cpu_cores: int) -> tuple[int, int]:
-    """
-    Calculate optimal parallelization strategy.
-    
-    Args:
-        num_games: Total number of games to play
-        cpu_cores: Number of CPU cores available
-        
-    Returns:
-        (num_workers, batch_size)
-    """
-    # Leave 2 cores for system processes
-    max_workers = max(1, cpu_cores - 2)
-    
-    # No parallelization for small game counts (overhead > benefit)
-    if num_games < 50:
-        return 1, num_games
-    
-    # For medium counts, use fewer workers to avoid overhead
-    if num_games < 200:
-        num_workers = min(4, max_workers, num_games // 25)
-    else:
-        # For large counts, use more workers but cap at reasonable batch sizes
-        num_workers = min(max_workers, num_games // 100)
-    
-    # Ensure we have at least some reasonable work per worker
-    num_workers = max(1, min(num_workers, num_games // 20))
-    
-    # Calculate batch size - distribute games evenly
-    batch_size = max(20, num_games // num_workers)
-    
-    return num_workers, batch_size
-
-
-def run_game_batch(args) -> Dict:
-    """
-    Worker function to run a batch of games in parallel.
-    
-    Args:
-        args: Tuple of (agent1_choice, agent2_choice, batch_size, start_game_num)
-        
-    Returns:
-        Dictionary with batch results
-    """
-    agent1_choice, agent2_choice, batch_size, start_game_num = args
-    
-    # Suppress output during parallel execution
-    import io
-    import contextlib
-    
-    results = {"Agent1": 0, "Agent2": 0}
-    
-    for game_num in range(batch_size):
-        # Create fresh agents for each game
-        agent1_fresh = create_agent(agent1_choice, "Agent1")
-        agent2_fresh = create_agent(agent2_choice, "Agent2")
-        
-        if not agent1_fresh or not agent2_fresh:
-            continue
-            
-        game = Game([agent1_fresh, agent2_fresh])
-        
-        # Suppress all output for parallel execution
-        f = io.StringIO()
-        with contextlib.redirect_stdout(f):
-            game.play_game()
-        
-        winner = game.winner
-        if winner:
-            results[winner.name] += 1
-    
-    return {
-        "results": results,
-        "batch_size": batch_size,
-        "start_game": start_game_num
-    }
 
 
 def full_setup():
@@ -489,133 +338,73 @@ def full_setup():
         print("1. Human")
         print("2. SimpleAI")  
         print("3. BayesPlayer")
-        if DQRN_AVAILABLE:
-            print("4. DQRN - Neural Network AI")
-        
-        max_choice = 4 if DQRN_AVAILABLE else 3
+        print("4. SmartBayesPlayer")
         
         while True:
-            choice = input(f"Select type for Player {i + 1} (1-{max_choice}): ").strip()
-            if choice in [str(j) for j in range(1, max_choice + 1)]:
+            choice = input(f"Select type for Player {i + 1} (1-4): ").strip()
+            if choice in ["1", "2", "3", "4"]:
                 break
-            print(f"Please enter a number between 1 and {max_choice}.")
+            print("Please choose 1, 2, 3, or 4.")
         
+        # Get player name
         if choice == "1":
-            name = input(f"Enter name for Player {i + 1}: ").strip() or f"Player{i + 1}"
+            name = input(f"Enter name for Player {i + 1}: ").strip()
+            if not name:
+                name = f"Player {i + 1}"
             players.append(HumanPlayer(name))
-        elif choice == "2":
-            name = f"SimpleAI{i + 1}"
-            players.append(SimpleAI(name))
-        elif choice == "3":
-            name = f"BayesAI{i + 1}"
-            players.append(BayesPlayer(name))
-        elif choice == "4" and DQRN_AVAILABLE:
-            name = f"DQRN{i + 1}"
-            print(f"\nSetting up DQRN for Player {i + 1}...")
-            checkpoint_path = select_dqrn_checkpoint()
-            if checkpoint_path:
-                agent = load_dqrn_agent(checkpoint_path, name)
-                if agent:
-                    players.append(agent)
-                else:
-                    print(f"❌ Failed to load DQRN for Player {i + 1}, using BayesPlayer instead")
-                    players.append(BayesPlayer(f"BayesAI{i + 1}"))
+        else:
+            name = input(f"Enter name for AI Player {i + 1} (optional): ").strip()
+            if not name:
+                name = f"AI_{i + 1}"
+            
+            if choice == "2":
+                players.append(SimpleAI(name))
+            elif choice == "3":
+                players.append(BayesPlayer(name))
             else:
-                print(f"❌ No checkpoint selected for Player {i + 1}, using BayesPlayer instead")
-                players.append(BayesPlayer(f"BayesAI{i + 1}"))
+                players.append(SmartBayesPlayer(name))
     
-    print(f"\n🎲 Starting game with {len(players)} players")
-    print("Players:", [p.name for p in players])
+    print(f"\n🎮 Starting game with {len(players)} players!")
     print("=" * 50)
     
     # Create and run game
-    game = Game(players)
-    game.play_game()
-    winner = game.winner
-    
-    if winner:
-        print(f"\n🏆 Winner: {winner.name}")
-    else:
-        print("🤔 Game ended without a clear winner")
-
-
-def test_dqrn_system():
-    """Test DQRN multi-head system"""
-    print("🧪 Testing DQRN Multi-Head System")
-    print("=" * 50)
-    
-    try:
-        from players.dqrn_multi_head.test_system import run_all_tests
-        run_all_tests()
-    except ImportError:
-        print("❌ DQRN system not available. Make sure you have PyTorch installed.")
-    except Exception as e:
-        print(f"❌ Test failed: {e}")
-
-
-def test_gpu():
-    """Test GPU setup"""
-    print("🔧 Testing GPU Setup")
-    print("=" * 50)
-    
-    try:
-        import sys
-        sys.path.append('scripts')
-        from test_gpu import main as test_gpu_main
-        test_gpu_main()
-    except ImportError as e:
-        print(f"❌ Could not import test modules: {e}")
-    except Exception as e:
-        print(f"❌ GPU test failed: {e}")
+    game_runner = GameRunner(players)
+    game_runner.play_game()
 
 
 def show_help():
     """Show help information"""
-    print("🎮 Dutch Cabo - Available Commands")
+    print("🎮 Dutch Cabo Card Game")
     print("=" * 50)
-    print()
-    print("Game Modes:")
-    print("  --quick-play        Quick human vs AI game")
-    print("  --agent-vs-agent    Watch two AIs compete")
-    print("  --full-setup        Full game setup (2-4 players)")
-    print()
-    print("Available AI Players:")
-    print("  • SimpleAI          Rule-based AI player")
-    print("  • BayesPlayer       Advanced Bayesian AI")
-    if DQRN_AVAILABLE:
-        print("  • DQRN              Neural Network AI (requires trained model)")
-    else:
-        print("  • DQRN              Neural Network AI (PyTorch required)")
-    print()
-    print("DQRN Training:")
-    if DQRN_AVAILABLE:
-        print("  Train models with:  python train_dqrn.py --name <run_name>")
-        print("  Example:            python train_dqrn.py --name batch1024")
-        training_runs = list_dqrn_training_runs()
-        if training_runs:
-            total_checkpoints = sum(len(checkpoints) for checkpoints in training_runs.values())
-            print(f"  Available runs:     {len(training_runs)} run(s), {total_checkpoints} checkpoint(s)")
-            for run_name in list(training_runs.keys())[:3]:  # Show first 3
-                print(f"    • {run_name}")
-            if len(training_runs) > 3:
-                print(f"    • ... and {len(training_runs) - 3} more")
-        else:
-            print("  Available runs:     None (train first)")
-    else:
-        print("  Install PyTorch to use DQRN neural network AI")
-    print()
-    print("Testing:")
-    print("  --test-system       Test DQRN neural network system")
-    print("  --test-gpu          Test GPU/CUDA setup")
-    print()
-    print("Other:")
-    print("  --info              Show detailed information")
-    print("  -h, --help          Show basic help")
-    print()
-    print("Examples:")
-    print("  python dutch.py --quick-play")
-    print("  python dutch.py --agent-vs-agent")
-    print("  python dutch.py --full-setup")
+    print("""
+GAME RULES:
+- Goal: Have the lowest score when the game ends
+- Each player starts with 4 face-down cards
+- Red Kings = 0 points, Aces = 1 point, Face cards = 10 points
+- Jacks allow swapping with opponents
+- Queens allow peeking at cards
+- Call DUTCH to end the game when you think you have the lowest score
+
+COMMANDS:
+    python dutch.py --quick-play                     # Quick human vs AI game
+    python dutch.py --agent-vs-agent                 # Watch AI vs AI battles (interactive)
+    python dutch.py --auto-battle [agent1] [agent2] [num_games]  # Automated AI battles
+    python dutch.py --full-setup                     # Custom game with 2-4 players
+    python dutch.py --help                           # Show this help
+
+EXAMPLES:
+    python dutch.py --quick-play                     # Play against AI
+    python dutch.py --agent-vs-agent                 # Watch AIs play (interactive)
+    python dutch.py --auto-battle                    # Default: SmartBayes vs Bayes, 100 games
+    python dutch.py --auto-battle 1 3                # SimpleAI vs SmartBayes, 100 games
+    python dutch.py --auto-battle 2 3 50             # Bayes vs SmartBayes, 50 games
+    python dutch.py --full-setup                     # Custom multiplayer setup
+
+AGENT TYPES:
+    1. SimpleAI - Rule-based AI
+    2. BayesPlayer - Advanced Bayesian AI (older)
+    3. SmartBayesPlayer - Enhanced Bayesian AI (newer)
+    """)
 
 
 def main():
@@ -625,49 +414,114 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python dutch.py --quick-play        # Quick human vs AI
-  python dutch.py --agent-vs-agent    # AI vs AI battles
-  python dutch.py --full-setup        # Full game setup
-  python dutch.py --test-system       # Test DQRN system
+    python dutch.py --quick-play                     # Quick human vs AI game
+    python dutch.py --agent-vs-agent                 # Watch AI vs AI battles
+    python dutch.py --auto-battle                    # Default: SmartBayes vs Bayes
+    python dutch.py --auto-battle 1 3                # SimpleAI vs SmartBayes
+    python dutch.py --auto-battle 2 3 50             # Bayes vs SmartBayes, 50 games
+    python dutch.py --full-setup                     # Custom game setup
         """
     )
     
-    # Add mutually exclusive group for game modes
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--quick-play', action='store_true', 
-                      help='Quick human vs AI game')
-    group.add_argument('--agent-vs-agent', action='store_true',
-                      help='Watch two agents play against each other')
-    group.add_argument('--full-setup', action='store_true',
-                      help='Full game setup with multiple players')
-    group.add_argument('--test-system', action='store_true',
-                      help='Test DQRN multi-head system')
-    group.add_argument('--test-gpu', action='store_true',
-                      help='Test GPU/CUDA setup')
-    group.add_argument('--info', action='store_true',
-                      help='Show detailed information')
+    parser.add_argument(
+        "--quick-play", 
+        action="store_true",
+        help="Quick human vs AI game"
+    )
+    
+    parser.add_argument(
+        "--agent-vs-agent",
+        action="store_true", 
+        help="Watch two AI agents play (interactive)"
+    )
+    
+    parser.add_argument(
+        "--auto-battle",
+        nargs='*',
+        help="Automated AI battle. Usage: --auto-battle [agent1] [agent2] [num_games]. Default: SmartBayes vs Bayes, 100 games"
+    )
+    
+    parser.add_argument(
+        "--full-setup",
+        action="store_true",
+        help="Full game setup (2-4 players)"
+    )
+    
+    parser.add_argument(
+        "--help-game",
+        action="store_true",
+        help="Show game rules and help"
+    )
+    
+    # If no arguments, show help and default to quick play
+    if len(sys.argv) == 1:
+        print("🎮 Dutch Cabo Card Game")
+        print("=" * 50)
+        print("Available modes:")
+        print("1. Quick Play (Human vs AI)")
+        print("2. Agent vs Agent (AI vs AI, interactive)")
+        print("3. Auto Battle (AI vs AI, automatic)")
+        print("4. Full Setup (2-4 players)")
+        print("5. Show Help")
+        
+        while True:
+            choice = input("\nSelect mode (1-5): ").strip()
+            if choice == "1":
+                quick_play()
+                break
+            elif choice == "2":
+                agent_vs_agent()
+                break
+            elif choice == "3":
+                auto_battle()
+                break
+            elif choice == "4":
+                full_setup()
+                break
+            elif choice == "5":
+                show_help()
+                break
+            else:
+                print("Please enter 1, 2, 3, 4, or 5")
+        return
     
     args = parser.parse_args()
     
-    try:
-        if args.quick_play:
-            quick_play()
-        elif args.agent_vs_agent:
-            agent_vs_agent()
-        elif args.full_setup:
-            full_setup()
-        elif args.test_system:
-            test_dqrn_system()
-        elif args.test_gpu:
-            test_gpu()
-        elif args.info:
-            show_help()
-    
-    except KeyboardInterrupt:
-        print("\n\n👋 Thanks for playing Dutch Cabo!")
-    except Exception as e:
-        print(f"\n❌ Error: {e}")
-        sys.exit(1)
+    # No error handling - let crashes happen for easier debugging
+    if args.quick_play:
+        quick_play()
+    elif args.agent_vs_agent:
+        agent_vs_agent()
+    elif args.auto_battle is not None:
+        # Parse auto-battle arguments
+        if len(args.auto_battle) == 0:
+            # Default: SmartBayes vs Bayes
+            auto_battle()
+        elif len(args.auto_battle) == 2:
+            # Agent selection: --auto-battle 1 3
+            try:
+                agent1 = int(args.auto_battle[0])
+                agent2 = int(args.auto_battle[1])
+                auto_battle(agent1, agent2)
+            except ValueError:
+                print("❌ Invalid agent numbers! Use 1, 2, or 3")
+        elif len(args.auto_battle) == 3:
+            # Agent selection + game count: --auto-battle 1 3 50
+            try:
+                agent1 = int(args.auto_battle[0])
+                agent2 = int(args.auto_battle[1])
+                num_games = int(args.auto_battle[2])
+                auto_battle(agent1, agent2, num_games)
+            except ValueError:
+                print("❌ Invalid arguments! Use: --auto-battle [agent1] [agent2] [num_games]")
+        else:
+            print("❌ Invalid auto-battle arguments! Use: --auto-battle [agent1] [agent2] [num_games]")
+    elif args.full_setup:
+        full_setup()
+    elif args.help_game:
+        show_help()
+    else:
+        parser.print_help()
 
 
 if __name__ == "__main__":

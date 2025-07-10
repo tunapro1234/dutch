@@ -7,11 +7,11 @@ from typing import List, Optional, Tuple, Dict, Set
 from collections import defaultdict, Counter
 import math
 
-from src.player import Player
-from src.card import Card, Suit
+from game.engine.player_base import PlayerBase
+from game.engine.card import Card, Suit
 
 
-class BayesPlayer(Player):
+class BayesPlayer(PlayerBase):
     """Advanced AI using Bayesian probability and opponent modeling"""
     
     def __init__(self, name: str):
@@ -246,7 +246,7 @@ class BayesPlayer(Player):
         
         return worst_pos
     
-    def choose_swap_target(self, opponents: List[Player], game_state: dict) -> Tuple[Player, int]:
+    def choose_swap_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[PlayerBase, int]:
         """Bayesian opponent modeling for swap target"""
         # Register opponents
         for opp in opponents:
@@ -279,7 +279,7 @@ class BayesPlayer(Player):
         target_position = random.choice(valid_positions)
         return target_opponent, target_position
     
-    def choose_peek_target(self, opponents: List[Player], game_state: dict) -> Tuple[Optional[Player], int]:
+    def choose_peek_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[Optional[PlayerBase], int]:
         """Information-theoretic peek selection"""
         # Always prioritize own unknown cards for maximum information gain
         unknown_positions = [i for i in range(4) if self.hand[i] is not None and not self.known_cards[i]]
@@ -316,50 +316,7 @@ class BayesPlayer(Player):
         
         return "deck"
     
-    def want_to_discard_doubles(self, doubles_available: List[Tuple[int, int, Card]], 
-                               timing: str, game_state: dict) -> Optional[Tuple[int, int]]:
-        """Bayesian analysis of double discard timing"""
-        if not doubles_available:
-            return None
-        
-        # Calculate expected value of keeping vs discarding each double
-        best_discard = None
-        best_value_reduction = 0
-        
-        for pos1, pos2, card in doubles_available:
-            card_value = card.get_score_value()
-            
-            # Value of discarding: immediate score reduction
-            immediate_benefit = card_value * 2
-            
-            # Cost: losing potential future strategic value
-            strategic_cost = 0
-            if card_value <= 3:  # Good cards have higher strategic cost
-                strategic_cost = 2
-            
-            net_benefit = immediate_benefit - strategic_cost
-            
-            # Timing considerations
-            if timing == "before_draw":
-                # Before draw: more strategic, be selective
-                if net_benefit > best_value_reduction and card_value >= 5:
-                    best_value_reduction = net_benefit
-                    best_discard = (pos1, pos2)
-            else:
-                # After turn: cleanup, be more aggressive
-                if net_benefit > best_value_reduction and card_value >= 3:
-                    best_value_reduction = net_benefit
-                    best_discard = (pos1, pos2)
-        
-        if best_discard:
-            card_val = doubles_available[0][2].get_score_value()  # Find the matching card value
-            for pos1, pos2, card in doubles_available:
-                if (pos1, pos2) == best_discard:
-                    card_val = card.get_score_value()
-                    break
-            print(f"{self.name}: Bayesian analysis suggests discarding doubles (value: {card_val})")
-        
-        return best_discard
+
     
     def want_to_discard_pile_matches(self, matches_available: List[Tuple[int, Card]], 
                                    top_discard_card: Card, timing: str, game_state: dict) -> Optional[List[int]]:

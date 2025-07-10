@@ -5,10 +5,10 @@ Simple AI player - more advanced than BasicAI but still straightforward.
 import random
 from typing import List, Optional, Tuple
 
-from src.player import Player
+from game.engine.player_base import PlayerBase
 
 
-class SimpleAI(Player):
+class SimpleAI(PlayerBase):
     """Simple rule-based AI player with moderate strategy"""
     
     def choose_initial_peek(self) -> int:
@@ -50,14 +50,14 @@ class SimpleAI(Player):
         # Otherwise discard
         return {"action": "discard"}
     
-    def choose_swap_target(self, opponents: List[Player], game_state: dict) -> Tuple[Player, int]:
+    def choose_swap_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[PlayerBase, int]:
         """Randomly choose swap target"""
         target_opponent = random.choice(opponents)
         valid_positions = target_opponent.get_valid_positions()
         target_position = random.choice(valid_positions)
         return target_opponent, target_position
     
-    def choose_peek_target(self, opponents: List[Player], game_state: dict) -> Tuple[Optional[Player], int]:
+    def choose_peek_target(self, opponents: List[PlayerBase], game_state: dict) -> Tuple[Optional[PlayerBase], int]:
         """Choose peek target - prioritize own unknown cards for information"""
         # PRIORITY: Always peek at own unknown cards first for information gathering
         unknown_positions = [i for i in self.get_valid_positions() if not self.known_cards[i]]
@@ -94,23 +94,7 @@ class SimpleAI(Player):
         # Otherwise prefer the unknown from deck
         return "deck"
     
-    def want_to_discard_doubles(self, doubles_available, timing: str, game_state: dict):
-        """Strategic decision about discarding doubles"""
-        if not doubles_available:
-            return None
-        
-        # SimpleAI strategy: discard high-value doubles to reduce score
-        # More likely to discard before draw (strategic) than after turn (cleanup)
-        discard_chance = 0.8 if timing == "before_draw" else 0.6
-        
-        if random.random() < discard_chance:
-            # Choose the highest value doubles to discard
-            best_double = max(doubles_available, key=lambda x: x[2].get_score_value())
-            pos1, pos2, card = best_double
-            print(f"{self.name}: Discarding doubles {card} to reduce score")
-            return (pos1, pos2)
-        
-        return None
+
     
     def want_to_discard_pile_matches(self, matches_available, top_discard_card, timing: str, game_state: dict):
         """Strategic decision about discarding cards matching discard pile"""
