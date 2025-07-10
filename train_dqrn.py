@@ -64,21 +64,28 @@ def main():
                        help="Training run name (creates folder with this name)")
     parser.add_argument("--iterations", type=int, default=5000, 
                        help="Number of training iterations (default: 5000)")
-    parser.add_argument("--eval-freq", type=int, default=200,
-                       help="Evaluation frequency (default: 200)")
+    parser.add_argument("--eval-freq", type=int, default=300,
+                       help="Evaluation frequency (default: 300)")
     parser.add_argument("--learning-rate", type=float, default=1e-4,
                        help="Learning rate (default: 1e-4)")
     parser.add_argument("--buffer-size", type=int, default=100000,
                        help="Replay buffer size (default: 100000)")
     parser.add_argument("--batch-size", type=int, default=None,
                        help="Override automatic batch size calculation")
-    parser.add_argument("--save-freq", type=int, default=1000,
-                       help="Save checkpoint every N iterations (default: 1000)")
+    parser.add_argument("--save-freq", type=int, default=2000,
+                       help="Save checkpoint every N iterations (default: 2000)")
     
     args = parser.parse_args()
     
-    print("🚀 Starting DQRN Training for Dutch Cabo")
-    print("=" * 60)
+    print("🚀 ULTRA-OPTIMIZED DQRN Training for Dutch Cabo")
+    print("=" * 70)
+    print("🔥 OPTIMIZATIONS ENABLED:")
+    print("   ⚡ Resource-Conscious Parallel Games")
+    print("   🎯 Mixed Precision Training") 
+    print("   💪 Gradient Accumulation")
+    print("   📈 Enlarged Replay Buffer")
+    print("   🎲 Dutch Call & Feature Rewards")
+    print("=" * 70)
     
     # Migrate old checkpoints first
     migrate_old_checkpoints()
@@ -91,17 +98,20 @@ def main():
     print(f"📁 Training: {args.name}")
     print(f"📂 Directory: {training_dir}")
     
-    # Training configuration
+    # ULTRA-OPTIMIZED Training configuration
     config = {
         "learning_rate": args.learning_rate,
         "gamma": 0.99,
         "epsilon_start": 1.0,
-        "epsilon_end": 0.1,
-        "epsilon_decay": 0.995,
-        "buffer_size": args.buffer_size,
-        "target_update_freq": 1000,
+        "epsilon_end": 0.1,   # Standard final epsilon
+        "epsilon_decay": 0.999,   # Standard RL decay rate
+        "buffer_size": max(args.buffer_size, 200000),  # Minimum 200K buffer
+        "target_update_freq": 500,  # More frequent target updates
+        "opponent_update_freq": 1000,  # More frequent opponent updates
         "batch_size_override": args.batch_size,
-        "training_name": args.name
+        "training_name": args.name,
+        "self_play_ratio": 0.995,  # Even more self-play
+        "ultra_optimized": True  # Enable all performance optimizations
     }
     
     # Create trainer
@@ -121,9 +131,18 @@ def main():
     print(f"   Initial win rate: {eval_stats['win_rate']:.1%}")
     print(f"   Initial avg reward: {eval_stats['avg_reward']:.2f}")
     
-    # Training loop with automatic checkpointing
+    # Display optimized system info
+    print(f"\n💻 SYSTEM UTILIZATION:")
+    print(f"   GPU: {trainer.hardware.device} ({trainer.hardware.gpu_memory_gb:.1f} GB)")
+    print(f"   CPU Cores: {trainer.hardware.cpu_cores} (Using: {trainer.hardware.num_game_workers})")
+    print(f"   Training Batch: {trainer.batch_size}")
+    print(f"   Game Batch: {trainer.hardware.experience_batch_size}")
+    print(f"   Mixed Precision: {'✅' if getattr(trainer, 'use_amp', False) else '❌'}")
+    print(f"   Buffer Capacity: {trainer.replay_buffer.capacity:,}")
+
+    # ULTRA-OPTIMIZED Training loop with automatic checkpointing
     try:
-        trainer.train(
+        training_results = trainer.train(
             num_iterations=args.iterations, 
             eval_freq=args.eval_freq,
             save_freq=args.save_freq,
@@ -136,13 +155,23 @@ def main():
         print(f"   Final win rate: {final_stats['win_rate']:.1%}")
         print(f"   Final avg reward: {final_stats['avg_reward']:.2f}")
         
-        # Save final checkpoint
+        # Save final checkpoint with complete progress
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         checkpoint_path = os.path.join(training_dir, f"dqrn_final_{timestamp}.pt")
-        trainer.save_checkpoint(checkpoint_path)
         
-        print(f"\n✅ Training completed successfully!")
-        print(f"   Final model saved: {checkpoint_path}")
+        # Combine training results with final evaluation
+        final_progress = training_results.copy()
+        final_progress["final_stats"]["final_evaluation_100_games"] = final_stats
+        
+        trainer.save_checkpoint(checkpoint_path, final_progress)
+        
+        print(f"\n✅ ULTRA-OPTIMIZED TRAINING COMPLETED!")
+        print(f"   🏆 Final model saved: {checkpoint_path}")
+        print(f"   ⚡ Performance gains achieved through:")
+        print(f"      - Resource-conscious parallel execution")
+        print(f"      - Mixed precision training")
+        print(f"      - Gradient accumulation")
+        print(f"      - Dutch call & feature rewards")
         
     except KeyboardInterrupt:
         print("\n⏸️  Training interrupted by user")

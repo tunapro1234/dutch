@@ -183,6 +183,9 @@ def quick_play():
             if not ai:
                 print("❌ Failed to load DQRN, falling back to BayesAI")
                 ai = BayesPlayer("BayesAI")
+            else:
+                # Enable debug mode for human vs DQRN games
+                ai._debug_mode = True
     
     print(f"\n🥊 {human.name} vs {ai.name}")
     print("=" * 50)

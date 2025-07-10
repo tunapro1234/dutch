@@ -9,12 +9,13 @@ from .player import Player, HumanPlayer, SimpleAI
 class Game:
     """Main game engine for the Dutch/Cabo card game"""
     
-    def __init__(self, players: List[Player]):
+    def __init__(self, players: List[Player], silent_mode: bool = False):
         """
         Initialize a new game.
         
         Args:
             players: List of Player objects (must be 2-4 players)
+            silent_mode: If True, suppress all print statements for training
         """
         if not 2 <= len(players) <= 4:
             raise ValueError("Game must have 2-4 players")
@@ -31,15 +32,17 @@ class Game:
         self.dutch_caller: Optional[Player] = None
         self.final_round = False
         self.turns_after_dutch = 0
+        self.silent_mode = silent_mode  # For training - suppress all prints
         
         # Game settings
         self.max_rounds = 1  # Can be expanded for multiple rounds
         
     def setup_new_game(self):
         """Set up a new game by shuffling deck and dealing cards"""
-        print(f"\n{'='*50}")
-        print(f"Starting Round {self.round_number}")
-        print(f"{'='*50}")
+        if not self.silent_mode:
+            print(f"\n{'='*50}")
+            print(f"Starting Round {self.round_number}")
+            print(f"{'='*50}")
         
         # Reset game state
         self.deck = create_deck()
@@ -70,11 +73,13 @@ class Game:
         for player in self.players:
             position = player.choose_initial_peek()
             peeked_card = player.peek_at_own_card(position)
-            print(f"{player.name} peeked at position {position}: {peeked_card}")
+            if not self.silent_mode:
+                print(f"{player.name} peeked at position {position}: {peeked_card}")
         
         # Randomly choose starting player
         self.current_player_index = random.randint(0, len(self.players) - 1)
-        print(f"\n{self.players[self.current_player_index].name} goes first!")
+        if not self.silent_mode:
+            print(f"\n{self.players[self.current_player_index].name} goes first!")
     
     def get_current_player(self) -> Player:
         """Get the current player"""
@@ -155,6 +160,9 @@ class Game:
     def display_game_state(self, current_player: Player):
         """Display the current game state"""
         from .player import HumanPlayer
+        
+        if self.silent_mode:
+            return  # Skip all display in silent mode
         
         print(f"\n{'='*60}")
         print(f"Turn {self.turn_count + 1} - {current_player.name}'s Turn")
