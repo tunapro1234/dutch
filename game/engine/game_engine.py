@@ -9,12 +9,13 @@ from .player_base import PlayerBase
 class GameEngine:
     """Pure game engine - no UI, just game logic for AI players"""
     
-    def __init__(self, players: List[PlayerBase]):
+    def __init__(self, players: List[PlayerBase], fixed_deck: Optional[List[Card]] = None):
         """
         Initialize a new game engine.
         
         Args:
             players: List of PlayerBase objects (must be 2-4 players)
+            fixed_deck: Optional fixed deck for testing (if None, creates shuffled deck)
         """
         if not 2 <= len(players) <= 4:
             raise ValueError("Game must have 2-4 players")
@@ -30,6 +31,7 @@ class GameEngine:
         self.dutch_caller: Optional[PlayerBase] = None
         self.final_round = False
         self.turns_after_dutch = 0
+        self.fixed_deck = fixed_deck  # Store for testing
         
         # Game settings
         self.max_rounds = 1
@@ -37,8 +39,13 @@ class GameEngine:
     def setup_new_game(self) -> Dict[str, Any]:
         """Set up a new game by shuffling deck and dealing cards"""
         # Reset game state
-        self.deck = create_deck()
-        random.shuffle(self.deck)
+        if self.fixed_deck is not None:
+            # Use fixed deck for testing (make a copy to avoid modifying original)
+            self.deck = self.fixed_deck.copy()
+        else:
+            # Normal game: create and shuffle deck
+            self.deck = create_deck()
+            random.shuffle(self.deck)
         self.discard_pile = []
         self.game_over = False
         self.winner = None
