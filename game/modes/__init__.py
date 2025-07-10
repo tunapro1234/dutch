@@ -10,6 +10,7 @@ from .full_setup import full_setup
 from .help_mode import show_help
 from .real_life_gui import real_life_gui_mode
 from .quick_play_gui import quick_play_gui
+from .advanced_gui import advanced_gui_mode
 
 __all__ = [
     "quick_play",
@@ -19,5 +20,6 @@ __all__ = [
     "full_setup",
     "show_help",
     "real_life_gui_mode",
-    "quick_play_gui"
+    "quick_play_gui",
+    "advanced_gui_mode"
 ] 

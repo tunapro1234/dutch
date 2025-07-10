@@ -1,0 +1,101 @@
+/* Global styles for Dutch Cabo GUI */
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #0c1f3d 0%, #1a4b73 50%, #2a5298 100%);
+  min-height: 100vh;
+  color: white;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Card animations */
+@keyframes cardFlip {
+  0% { transform: rotateY(0deg); }
+  50% { transform: rotateY(90deg); }
+  100% { transform: rotateY(0deg); }
+}
+
+@keyframes cardDeal {
+  0% { 
+    transform: scale(0) rotate(180deg);
+    opacity: 0;
+  }
+  100% { 
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes cardDiscard {
+  0% { 
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  100% { 
+    transform: scale(0.8) translateY(-20px);
+    opacity: 0.7;
+  }
+}
+
+/* Pulse animation for current player */
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(52, 152, 219, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0); }
+}
+
+/* Glow effect */
+.glow {
+  box-shadow: 0 0 20px rgba(52, 152, 219, 0.6);
+  animation: pulse 2s infinite;
+}
+
+/* Smooth transitions */
+.card, .player-area, .game-info {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .game-board {
+    flex-direction: column;
+    padding: 10px;
+  }
+  
+  .card {
+    width: 60px;
+    height: 84px;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+} 
