@@ -125,7 +125,16 @@ class DutchCaboEnv(gym.Env):
         
         # Create default opponents if none provided
         if opponent_players is None:
-            from ...players.simple_ai import SimpleAI
+            try:
+                # Try relative import first (when imported as package)
+                from ...players.simple_ai import SimpleAI
+            except ImportError:
+                # Fall back to absolute import (when run as script)
+                import sys
+                import os
+                sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                from players.simple_ai import SimpleAI
+            
             opponent_players = [
                 SimpleAI("Opponent1"),
                 SimpleAI("Opponent2"), 
